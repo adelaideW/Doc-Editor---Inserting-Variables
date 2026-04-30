@@ -1,8 +1,8 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { gemini } from '../services/gemini';
-import VariableDropdown, { VariableItem } from './VariableDropdown';
+import VariableDropdown, { VariableItem, VariableDropdownHandle } from './VariableDropdown';
 
 interface Props {
   insertTrigger?: number;
@@ -20,37 +20,16 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   const [filteredItems, setFilteredItems] = useState<VariableItem[]>([]);
   
   const editorRef = useRef<HTMLDivElement>(null);
+  const variableDropdownRef = useRef<VariableDropdownHandle>(null);
   const [isEmpty, setIsEmpty] = useState(true);
 
-  // Trigger from DocumentHeader button
-  useEffect(() => {
-    if (insertTrigger && insertTrigger > 0 && editorRef.current) {
-      editorRef.current.focus();
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        range.collapse(false);
-        
-        const trigger = document.createTextNode('{');
-        range.insertNode(trigger);
-        range.setStartAfter(trigger);
-        range.setEndAfter(trigger);
-        
-        updateDropdownPosition();
-        setShowDropdown(true);
-        setSearchQuery("");
-        setActiveIndex(0);
-      }
-    }
-  }, [insertTrigger]);
-
-  const updateDropdownPosition = () => {
+  const updateDropdownPosition = useCallback(() => {
     const sel = window.getSelection();
     if (sel && sel.rangeCount) {
       const range = sel.getRangeAt(0).cloneRange();
       const node = range.startContainer;
       const offset = range.startOffset;
-      
+
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent || "";
         const triggerIdx = text.lastIndexOf('{', offset);
@@ -62,15 +41,55 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
 
       const rects = range.getClientRects();
       const rect = rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
-      
-      if (rect) {
-        setDropdownPos({ 
-          top: rect.bottom + window.scrollY + 4, 
-          left: rect.left + window.scrollX 
+
+      if (rect && rect.width + rect.height > 0) {
+        // position: fixed uses viewport coordinates (do not add scroll offsets)
+        setDropdownPos({
+          top: rect.bottom + 4,
+          left: rect.left,
         });
       }
     }
-  };
+  }, []);
+
+  // Trigger from DocumentHeader button — anchor dropdown to the `{` at the caret
+  useLayoutEffect(() => {
+    if (insertTrigger && insertTrigger > 0 && editorRef.current) {
+      editorRef.current.focus();
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.collapse(false);
+
+        const trigger = document.createTextNode('{');
+        range.insertNode(trigger);
+        range.setStartAfter(trigger);
+        range.setEndAfter(trigger);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        setShowDropdown(true);
+        setSearchQuery('');
+        setActiveIndex(0);
+        requestAnimationFrame(() => updateDropdownPosition());
+      }
+    }
+  }, [insertTrigger, updateDropdownPosition]);
+
+  // Keep the menu aligned with the typed `{` while scrolling or resizing
+  useEffect(() => {
+    if (!showDropdown) return;
+    const ro = new ResizeObserver(() => updateDropdownPosition());
+    const root = editorRef.current?.closest('.overflow-y-auto') ?? document.documentElement;
+    ro.observe(root);
+    window.addEventListener('scroll', updateDropdownPosition, true);
+    window.addEventListener('resize', updateDropdownPosition);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+      window.removeEventListener('resize', updateDropdownPosition);
+    };
+  }, [showDropdown, updateDropdownPosition]);
 
   const createChip = (label: string) => {
     const chip = document.createElement('span');
@@ -90,18 +109,19 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
 
   const handleVariableSelect = useCallback((label: string) => {
     if (!editorRef.current) return;
-    
+
     editorRef.current.focus();
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount) return;
 
     const range = sel.getRangeAt(0);
     const node = range.startContainer;
-    
+
+    // Remove `{` plus any filter text typed after it (must not leave partial tokens in the doc)
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent || "";
       const triggerIdx = text.lastIndexOf('{', range.startOffset);
-      
+
       if (triggerIdx !== -1) {
         range.setStart(node, triggerIdx);
         range.setEnd(node, range.startOffset);
@@ -202,32 +222,33 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     if (showDropdown) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex(prev => (filteredItems.length > 0 ? (prev + 1) % filteredItems.length : 0));
+        setActiveIndex((prev) => (filteredItems.length > 0 ? (prev + 1) % filteredItems.length : 0));
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveIndex(prev => (filteredItems.length > 0 ? (prev - 1 + filteredItems.length) % filteredItems.length : 0));
+        setActiveIndex((prev) =>
+          filteredItems.length > 0 ? (prev - 1 + filteredItems.length) % filteredItems.length : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        if (variableDropdownRef.current?.drillInto()) {
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        if (variableDropdownRef.current?.drillOut()) {
+          e.preventDefault();
+        }
         return;
       }
       if (e.key === 'Enter') {
-        if (filteredItems.length > 0 && activeIndex >= 0 && activeIndex < filteredItems.length) {
+        if (variableDropdownRef.current?.activateSelection()) {
           e.preventDefault();
-          const selectedItem = filteredItems[activeIndex];
-          
-          // If it's a category, we don't insert, we just let the dropdown handle navigation logic
-          // (which happens through the state update in VariableDropdown)
-          // But to facilitate Enter to navigate, we can trigger the same logic as a click.
-          // In a real app we'd expose a handleSelect method that handles categories.
-          // For now, if it's NOT a category, insert. If it IS, clicking is required or we modify the dropdown.
-          if (!selectedItem.isCategory) {
-            handleVariableSelect(selectedItem.label);
-          } else {
-            // Logic for Enter on category is handled by simulate click or internal dropdown state
-            // Let's rely on the user clicking for category for now, or we can improve VariableDropdown's onSelect.
-          }
-          return;
         }
+        return;
       }
       if (e.key === 'Escape') {
         setShowDropdown(false);
@@ -322,16 +343,18 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
         )}
 
         {showDropdown && (
-          <VariableDropdown 
-            onSelect={handleVariableSelect} 
+          <VariableDropdown
+            ref={variableDropdownRef}
+            onSelect={handleVariableSelect}
             searchQuery={searchQuery}
             activeIndex={activeIndex}
             onFilteredItemsChange={setFilteredItems}
-            style={{ 
+            onMenuNavigate={() => setActiveIndex(0)}
+            style={{
               position: 'fixed',
-              top: `${dropdownPos.top}px`, 
-              left: `${dropdownPos.left}px` 
-            }} 
+              top: `${dropdownPos.top}px`,
+              left: `${dropdownPos.left}px`,
+            }}
           />
         )}
 
