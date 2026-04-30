@@ -1,13 +1,9 @@
 
 import React, { useMemo, useEffect, useState, forwardRef, useImperativeHandle, useCallback, useRef } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
+import { VARIABLE_TREE, type VariableMenuNode } from './variablesCatalog';
 
-/** Tree node — leaves have no `children` (or empty array). Insert is only allowed on leaves. */
-export type VariableMenuNode = {
-  id: string;
-  label: string;
-  children?: VariableMenuNode[];
-};
+export type { VariableMenuNode };
 
 export interface VariableItem {
   id: string;
@@ -18,111 +14,6 @@ export interface VariableItem {
   /** Exact string inserted when this leaf is chosen (defaults to label). */
   insertLabel?: string;
 }
-
-/** Sample hierarchy: some branches two levels deep, others deeper. */
-const VARIABLE_TREE: VariableMenuNode[] = [
-  {
-    id: 'emp',
-    label: 'Employee',
-    children: [
-      {
-        id: 'emp.personal',
-        label: 'Personal information',
-        children: [
-          {
-            id: 'emp.tax',
-            label: 'Tax & identifiers',
-            children: [
-              { id: 'emp.tax.ssn-mask', label: 'National ID masked last four digits' },
-              { id: 'emp.tax.country', label: 'Primary tax residence country code (ISO)' },
-            ],
-          },
-          {
-            id: 'emp.contact',
-            label: 'Contact routing',
-            children: [
-              { id: 'emp.contact.work-email', label: 'Primary work email routing address' },
-              {
-                id: 'emp.contact.escalation',
-                label: 'Escalation path',
-                children: [
-                  { id: 'emp.contact.esc mgr', label: 'People manager escalation inbox' },
-                  { id: 'emp.contact.oncall', label: 'On-call distribution list alias' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'emp.role',
-        label: 'Role & compensation',
-        children: [
-          { id: 'emp.role.title', label: 'Current published job title' },
-          {
-            id: 'emp.role.payroll',
-            label: 'Payroll attributes',
-            children: [
-              { id: 'emp.pay.base', label: 'Annual base compensation (localized currency)' },
-              { id: 'emp.pay.exempt', label: 'Fair Labor exemption status indicator' },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'co',
-    label: 'Company',
-    children: [
-      {
-        id: 'co.registry',
-        label: 'Legal entity registry',
-        children: [
-          { id: 'co.legal.name', label: 'Full registered legal entity name' },
-          { id: 'co.registry.ein', label: 'Employer identification number masked' },
-        ],
-      },
-      {
-        id: 'co.site',
-        label: 'Headquarters site',
-        children: [
-          {
-            id: 'co.addr',
-            label: 'Street & postal block',
-            children: [
-              { id: 'co.addr.line1', label: 'HQ street address line one' },
-              { id: 'co.addr.city', label: 'HQ city • region • postal code' },
-            ],
-          },
-          { id: 'co.site.tz', label: 'Facility local timezone (IANA string)' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'doc',
-    label: 'Document workflow',
-    children: [
-      {
-        id: 'doc.sign',
-        label: 'Signatures',
-        children: [
-          { id: 'doc.sign.when', label: 'Completed signature capture timestamp (UTC)' },
-          {
-            id: 'doc.sign.ip',
-            label: 'Signer network context',
-            children: [
-              { id: 'doc.sign.ip.mask', label: 'Signer IPv4 /24 masked prefix' },
-              { id: 'doc.sign.geo', label: 'Geo-IP derived metro label' },
-            ],
-          },
-        ],
-      },
-      { id: 'doc.version', label: 'Template revision hash (short)' },
-    ],
-  },
-];
 
 type LeafWithPath = { node: VariableMenuNode; breadcrumbs: string[] };
 
@@ -302,7 +193,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
 
     return (
       <div
-        className="absolute bg-white border border-gray-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-w-[min(100vw-32px,400px)]"
+        className="absolute bg-white border border-gray-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-w-[min(100vw-32px,620px)]"
         style={{ ...style, width: undefined, minWidth: 280 }}
         onMouseDown={(e) => e.preventDefault()}
       >

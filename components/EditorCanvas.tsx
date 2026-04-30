@@ -21,60 +21,71 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   
   const editorRef = useRef<HTMLDivElement>(null);
   const variableDropdownRef = useRef<VariableDropdownHandle>(null);
+  const showDropdownRef = useRef(false);
   const [isEmpty, setIsEmpty] = useState(true);
+  showDropdownRef.current = showDropdown;
 
   const updateDropdownPosition = useCallback(() => {
     const sel = window.getSelection();
-    if (sel && sel.rangeCount) {
-      const range = sel.getRangeAt(0).cloneRange();
-      const node = range.startContainer;
-      const offset = range.startOffset;
+    if (!sel?.rangeCount || !editorRef.current) return;
 
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent || "";
-        const triggerIdx = text.lastIndexOf('{', offset);
-        if (triggerIdx !== -1) {
-          range.setStart(node, triggerIdx);
-          range.setEnd(node, triggerIdx + 1);
-        }
-      }
+    const live = sel.getRangeAt(0).cloneRange();
+    live.collapse(true);
 
-      const rects = range.getClientRects();
-      const rect = rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
+    const rects = live.getClientRects();
+    let rect: DOMRect =
+      rects.length > 0
+        ? (rects[rects.length - 1] as DOMRect)
+        : (live.getBoundingClientRect() as DOMRect);
 
-      if (rect && rect.width + rect.height > 0) {
-        // position: fixed uses viewport coordinates (do not add scroll offsets)
-        setDropdownPos({
-          top: rect.bottom + 4,
-          left: rect.left,
-        });
+    // Collapsed caret can report 0×0 — measure an adjacent grapheme inside the text node if possible.
+    const sc = live.startContainer;
+    if (
+      rect.height === 0 &&
+      rect.width === 0 &&
+      sc.nodeType === Node.TEXT_NODE &&
+      (sc as Text).data.length > 0
+    ) {
+      const t = sc as Text;
+      const pos = Math.max(0, Math.min(live.startOffset, t.data.length - 1));
+      const probe = live.cloneRange();
+      probe.setStart(t, pos);
+      probe.setEnd(t, pos + 1);
+      const pr = probe.getBoundingClientRect();
+      if (pr.height || pr.width) {
+        rect = pr;
       }
     }
+
+    if (rect.height || rect.width) {
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+      return;
+    }
+
+    const er = editorRef.current.getBoundingClientRect();
+    setDropdownPos({
+      top: Math.max(er.top + 6, 6),
+      left: Math.max(er.left + 6, 6),
+    });
   }, []);
 
-  // Trigger from DocumentHeader button — anchor dropdown to the `{` at the caret
+  // Trigger from DocumentHeader button — `{` is not written to the canvas; caret anchors the dropdown.
   useLayoutEffect(() => {
     if (insertTrigger && insertTrigger > 0 && editorRef.current) {
       editorRef.current.focus();
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        range.collapse(false);
-
-        const trigger = document.createTextNode('{');
-        range.insertNode(trigger);
-        range.setStartAfter(trigger);
-        range.setEndAfter(trigger);
-        selection.removeAllRanges();
-        selection.addRange(range);
-
-        setShowDropdown(true);
-        setSearchQuery('');
-        setActiveIndex(0);
-        requestAnimationFrame(() => updateDropdownPosition());
-      }
+      setShowDropdown(true);
+      setSearchQuery('');
+      setActiveIndex(0);
+      requestAnimationFrame(() => updateDropdownPosition());
     }
   }, [insertTrigger, updateDropdownPosition]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [searchQuery]);
 
   // Keep the menu aligned with the typed `{` while scrolling or resizing
   useEffect(() => {
@@ -97,13 +108,19 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     chip.contentEditable = "false";
     chip.setAttribute('data-variable', label);
     
-    chip.innerHTML = `
-      <span class="pointer-events-none">${label}</span>
-      <div class="mx-1.5 w-[1px] h-3 bg-[#7A005D]/20 pointer-events-none"></div>
-      <button class="chip-delete-btn p-0.5 rounded hover:bg-[#7A005D]/10 transition-colors flex items-center justify-center cursor-pointer">
-        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="opacity-60 pointer-events-none"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-      </button>
-    `;
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'pointer-events-none';
+    labelSpan.textContent = label;
+    chip.appendChild(labelSpan);
+    const rule = document.createElement('div');
+    rule.className = 'mx-1.5 w-[1px] h-3 bg-[#7A005D]/20 pointer-events-none';
+    chip.appendChild(rule);
+    const delBtn = document.createElement('button');
+    delBtn.className =
+      'chip-delete-btn p-0.5 rounded hover:bg-[#7A005D]/10 transition-colors flex items-center justify-center cursor-pointer';
+    delBtn.type = 'button';
+    delBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="opacity-60 pointer-events-none"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+    chip.appendChild(delBtn);
     return chip;
   };
 
@@ -114,20 +131,8 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount) return;
 
-    const range = sel.getRangeAt(0);
-    const node = range.startContainer;
-
-    // Remove `{` plus any filter text typed after it (must not leave partial tokens in the doc)
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent || "";
-      const triggerIdx = text.lastIndexOf('{', range.startOffset);
-
-      if (triggerIdx !== -1) {
-        range.setStart(node, triggerIdx);
-        range.setEnd(node, range.startOffset);
-        range.deleteContents();
-      }
-    }
+    const range = sel.getRangeAt(0).cloneRange();
+    range.collapse(true);
 
     const chip = createChip(label);
     range.insertNode(chip);
@@ -153,50 +158,18 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     const hasChips = el.querySelectorAll('.variable-chip').length > 0;
     setIsEmpty(el.innerText.trim() === "" && !hasChips);
 
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      const node = range.startContainer;
-      const offset = range.startOffset;
-      
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent || "";
-        const textBeforeCaret = text.substring(0, offset);
-        
-        const lastOpen = textBeforeCaret.lastIndexOf('{');
-        if (lastOpen !== -1 && textBeforeCaret.endsWith('}')) {
-          const label = textBeforeCaret.substring(lastOpen + 1, textBeforeCaret.length - 1);
-          if (label.trim()) {
-            range.setStart(node, lastOpen);
-            range.setEnd(node, offset);
-            range.deleteContents();
-            
-            const chip = createChip(label);
-            range.insertNode(chip);
-            range.setStartAfter(chip);
-            range.setEndAfter(chip);
-            
-            sel.removeAllRanges();
-            sel.addRange(range);
-            setShowDropdown(false);
-            return;
-          }
-        }
-
-        const triggerIdx = textBeforeCaret.lastIndexOf('{');
-        if (triggerIdx !== -1) {
-          const query = textBeforeCaret.substring(triggerIdx + 1);
-          setSearchQuery(query);
-          setShowDropdown(true);
-          setActiveIndex(0);
-          requestAnimationFrame(updateDropdownPosition);
-        } else {
-          setShowDropdown(false);
-        }
-      } else {
-        setShowDropdown(false);
-      }
+    if (showDropdownRef.current) {
+      requestAnimationFrame(() => updateDropdownPosition());
     }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (!showDropdownRef.current) return;
+    const plain = e.clipboardData?.getData('text/plain');
+    if (!plain) return;
+    e.preventDefault();
+    setSearchQuery((s) => s + plain.replace(/\s+/g, ' '));
+    requestAnimationFrame(() => updateDropdownPosition());
   };
 
   const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -215,11 +188,35 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       }
     }
     
-    if (showDropdown) setShowDropdown(false);
+    if (showDropdown) {
+      setShowDropdown(false);
+      setSearchQuery('');
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (showDropdown) {
+      const mod = e.ctrlKey || e.metaKey || e.altKey;
+
+      if (e.key === 'Backspace') {
+        if (searchQuery.length > 0) {
+          e.preventDefault();
+          setSearchQuery((s) => s.slice(0, -1));
+          requestAnimationFrame(() => updateDropdownPosition());
+          return;
+        }
+        setShowDropdown(false);
+        setSearchQuery('');
+        return;
+      }
+
+      if (!mod && e.key.length === 1) {
+        e.preventDefault();
+        setSearchQuery((s) => s + e.key);
+        requestAnimationFrame(() => updateDropdownPosition());
+        return;
+      }
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setActiveIndex((prev) => (filteredItems.length > 0 ? (prev + 1) % filteredItems.length : 0));
@@ -251,9 +248,22 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
         return;
       }
       if (e.key === 'Escape') {
+        e.preventDefault();
         setShowDropdown(false);
+        setSearchQuery('');
         return;
       }
+
+      return;
+    }
+
+    if (!showDropdown && e.key === '{') {
+      e.preventDefault();
+      setShowDropdown(true);
+      setSearchQuery('');
+      setActiveIndex(0);
+      requestAnimationFrame(() => updateDropdownPosition());
+      return;
     }
     
     if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -279,25 +289,24 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
           if (nodeToRevert instanceof HTMLElement && nodeToRevert.classList.contains('variable-chip')) {
             e.preventDefault();
             const label = nodeToRevert.getAttribute('data-variable') || "";
-            const textToInsert = `{${label}`;
-            
+            const parent = nodeToRevert.parentNode;
+            const idx =
+              parent != null ? Array.prototype.indexOf.call(parent.childNodes, nodeToRevert) : -1;
             nodeToRevert.remove();
-            
-            const textNode = document.createTextNode(textToInsert);
-            range.insertNode(textNode);
-            
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            
+            if (parent != null && idx >= 0) {
+              range.setStart(parent, idx);
+              range.setEnd(parent, idx);
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+
             setSearchQuery(label);
             setShowDropdown(true);
             setActiveIndex(0);
             requestAnimationFrame(updateDropdownPosition);
 
-            const event = new Event('input', { bubbles: true });
-            editorRef.current?.dispatchEvent(event);
+            editorRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
           }
         }
       }
@@ -329,6 +338,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
           ref={editorRef}
           contentEditable
           onInput={handleInput}
+          onPaste={handlePaste}
           onClick={handleEditorClick}
           onKeyDown={handleKeyDown}
           className="w-full h-full min-h-[800px] outline-none border-none text-[16px] leading-[1.6] text-[#1A1A1A] font-normal whitespace-pre-wrap selection:bg-[#7A005D]/20 selection:text-[#7A005D]"
