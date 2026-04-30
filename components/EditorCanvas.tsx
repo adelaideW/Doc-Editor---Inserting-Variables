@@ -22,6 +22,8 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const variableDropdownRef = useRef<VariableDropdownHandle>(null);
   const showDropdownRef = useRef(false);
+  /** Plain-text node replacing a chip during “keyword edit” mode; filter text is visible in the doc */
+  const breakoutTextRef = useRef<Text | null>(null);
   const [isEmpty, setIsEmpty] = useState(true);
   showDropdownRef.current = showDropdown;
 
@@ -83,9 +85,42 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     });
   }, []);
 
+  /** Replace chip with visible label text + search mode; caret at end — further Backspace removes characters until empty removes variable. */
+  const replaceChipWithBreakoutText = useCallback((chip: HTMLElement) => {
+    const ed = editorRef.current;
+    if (!ed) return false;
+    const label = chip.getAttribute('data-variable') ?? '';
+    const parent = chip.parentNode;
+    if (!parent) return false;
+
+    const textNode = document.createTextNode(label);
+    parent.replaceChild(textNode, chip);
+
+    breakoutTextRef.current = textNode;
+    setSearchQuery(label);
+    setShowDropdown(true);
+    setActiveIndex(0);
+
+    const sel = window.getSelection();
+    if (sel) {
+      const r = document.createRange();
+      r.setStart(textNode, textNode.data.length);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+
+    requestAnimationFrame(() => {
+      updateDropdownPosition();
+      ed.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    return true;
+  }, [updateDropdownPosition]);
+
   // Trigger from DocumentHeader button — `{` is not written to the canvas; caret anchors the dropdown.
   useLayoutEffect(() => {
     if (insertTrigger && insertTrigger > 0 && editorRef.current) {
+      breakoutTextRef.current = null;
       editorRef.current.focus();
       setShowDropdown(true);
       setSearchQuery('');
@@ -146,6 +181,26 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     range.collapse(true);
 
     const chip = createChip(label);
+
+    const bo = breakoutTextRef.current;
+    if (bo && bo.parentNode) {
+      bo.parentNode.replaceChild(chip, bo);
+      breakoutTextRef.current = null;
+      sel.removeAllRanges();
+      const r = document.createRange();
+      const space = document.createTextNode('\u00A0');
+      r.setStartAfter(chip);
+      r.insertNode(space);
+      r.setStartAfter(space);
+      r.collapse(true);
+      sel.addRange(r);
+      setShowDropdown(false);
+      setSearchQuery('');
+      setIsEmpty(false);
+      setActiveIndex(0);
+      return;
+    }
+
     range.insertNode(chip);
     range.setStartAfter(chip);
     range.setEndAfter(chip);
@@ -167,7 +222,26 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const hasChips = el.querySelectorAll('.variable-chip').length > 0;
-    setIsEmpty(el.innerText.trim() === "" && !hasChips);
+    setIsEmpty(el.innerText.trim() === '' && !hasChips);
+
+    const detachedBo = breakoutTextRef.current;
+    if (detachedBo && !detachedBo.parentNode) {
+      breakoutTextRef.current = null;
+    }
+
+    const activeBo = breakoutTextRef.current;
+    if (activeBo?.parentNode) {
+      const data = activeBo.data;
+      setSearchQuery(data);
+      if (data === '') {
+        activeBo.remove();
+        breakoutTextRef.current = null;
+        setShowDropdown(false);
+        setSearchQuery('');
+        const hasAnyChips = el.querySelectorAll('.variable-chip').length > 0;
+        setIsEmpty(el.innerText.trim() === '' && !hasAnyChips);
+      }
+    }
 
     if (showDropdownRef.current) {
       requestAnimationFrame(() => updateDropdownPosition());
@@ -176,6 +250,8 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
 
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     if (!showDropdownRef.current) return;
+    if (breakoutTextRef.current?.parentNode) return;
+
     const plain = e.clipboardData?.getData('text/plain');
     if (!plain) return;
     e.preventDefault();
@@ -200,6 +276,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     }
     
     if (showDropdown) {
+      breakoutTextRef.current = null;
       setShowDropdown(false);
       setSearchQuery('');
     }
@@ -208,24 +285,35 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (showDropdown) {
       const mod = e.ctrlKey || e.metaKey || e.altKey;
+      const inBreakout = !!breakoutTextRef.current?.parentNode;
 
-      if (e.key === 'Backspace') {
-        if (searchQuery.length > 0) {
+      if (inBreakout) {
+        // Typing/backspace/delete apply to visible label text in the editor; picker filters via handleInput sync.
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          return;
+        }
+        if (!mod && e.key.length === 1) {
+          return;
+        }
+      } else {
+        if (e.key === 'Backspace') {
+          if (searchQuery.length > 0) {
+            e.preventDefault();
+            setSearchQuery((s) => s.slice(0, -1));
+            requestAnimationFrame(() => updateDropdownPosition());
+            return;
+          }
+          setShowDropdown(false);
+          setSearchQuery('');
+          return;
+        }
+
+        if (!mod && e.key.length === 1) {
           e.preventDefault();
-          setSearchQuery((s) => s.slice(0, -1));
+          setSearchQuery((s) => s + e.key);
           requestAnimationFrame(() => updateDropdownPosition());
           return;
         }
-        setShowDropdown(false);
-        setSearchQuery('');
-        return;
-      }
-
-      if (!mod && e.key.length === 1) {
-        e.preventDefault();
-        setSearchQuery((s) => s + e.key);
-        requestAnimationFrame(() => updateDropdownPosition());
-        return;
       }
 
       if (e.key === 'ArrowDown') {
@@ -260,6 +348,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       }
       if (e.key === 'Escape') {
         e.preventDefault();
+        breakoutTextRef.current = null;
         setShowDropdown(false);
         setSearchQuery('');
         return;
@@ -269,6 +358,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     }
 
     if (!showDropdown && e.key === '{') {
+      breakoutTextRef.current = null;
       e.preventDefault();
       setShowDropdown(true);
       setSearchQuery('');
@@ -276,48 +366,58 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       requestAnimationFrame(() => updateDropdownPosition());
       return;
     }
-    
+
+    /** Backspace/delete adjacent to chip: unwrap into editable keyword text (full label preserved); chip only disappears after keywords cleared or X button. */
     if (e.key === 'Backspace' || e.key === 'Delete') {
       const sel = window.getSelection();
-      if (sel && sel.rangeCount > 0) {
+      if (sel?.rangeCount) {
         const range = sel.getRangeAt(0);
         if (range.collapsed) {
-          let nodeToRevert = null;
-          
-          if (range.startOffset === 0) {
-            nodeToRevert = range.startContainer.previousSibling;
-          } else if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
-            nodeToRevert = range.startContainer.childNodes[range.startOffset - 1];
-          } else if (range.startContainer.nodeType === Node.TEXT_NODE && range.startOffset > 0) {
-             const prev = range.startContainer.previousSibling;
-             if (prev instanceof HTMLElement && prev.classList.contains('variable-chip')) {
-               if (range.startContainer.textContent?.charCodeAt(range.startOffset - 1) === 160 || range.startContainer.textContent?.charAt(range.startOffset -1) === ' ') {
-                 nodeToRevert = prev;
-               }
-             }
+          let chipToBreak: HTMLElement | null = null;
+
+          const sc = range.startContainer;
+
+          if (e.key === 'Backspace') {
+            if (sc.nodeType === Node.TEXT_NODE && range.startOffset > 0) {
+              const t = sc as Text;
+              const ch = t.data.charCodeAt(range.startOffset - 1);
+              const prev = t.previousSibling;
+              const charBeforeCaret = t.data.charAt(range.startOffset - 1);
+              const isNbspPrev = ch === 160 || charBeforeCaret === ' ';
+              if (isNbspPrev && prev instanceof HTMLElement && prev.classList.contains('variable-chip')) {
+                chipToBreak = prev;
+              }
+            } else if (sc.nodeType === Node.TEXT_NODE && range.startOffset === 0) {
+              const prev = sc.previousSibling;
+              if (prev instanceof HTMLElement && prev.classList.contains('variable-chip')) {
+                chipToBreak = prev;
+              }
+            } else if (sc.nodeType === Node.ELEMENT_NODE && range.startOffset > 0) {
+              const prev = sc.childNodes[range.startOffset - 1];
+              if (prev instanceof HTMLElement && prev.classList.contains('variable-chip')) {
+                chipToBreak = prev;
+              }
+            }
+          } else if (e.key === 'Delete') {
+            if (sc.nodeType === Node.TEXT_NODE) {
+              const t = sc as Text;
+              if (range.startOffset === t.data.length) {
+                const nx = t.nextSibling;
+                if (nx instanceof HTMLElement && nx.classList.contains('variable-chip')) {
+                  chipToBreak = nx;
+                }
+              }
+            } else if (sc.nodeType === Node.ELEMENT_NODE && range.startOffset < sc.childNodes.length) {
+              const nx = sc.childNodes[range.startOffset];
+              if (nx instanceof HTMLElement && nx.classList.contains('variable-chip')) {
+                chipToBreak = nx;
+              }
+            }
           }
 
-          if (nodeToRevert instanceof HTMLElement && nodeToRevert.classList.contains('variable-chip')) {
+          if (chipToBreak) {
             e.preventDefault();
-            const label = nodeToRevert.getAttribute('data-variable') || "";
-            const parent = nodeToRevert.parentNode;
-            const idx =
-              parent != null ? Array.prototype.indexOf.call(parent.childNodes, nodeToRevert) : -1;
-            nodeToRevert.remove();
-            if (parent != null && idx >= 0) {
-              range.setStart(parent, idx);
-              range.setEnd(parent, idx);
-              range.collapse(true);
-              sel.removeAllRanges();
-              sel.addRange(range);
-            }
-
-            setSearchQuery(label);
-            setShowDropdown(true);
-            setActiveIndex(0);
-            requestAnimationFrame(updateDropdownPosition);
-
-            editorRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
+            replaceChipWithBreakoutText(chipToBreak);
           }
         }
       }
