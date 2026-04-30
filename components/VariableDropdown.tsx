@@ -193,7 +193,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
 
     return (
       <div
-        className="absolute bg-white border border-gray-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-w-[min(100vw-32px,620px)]"
+        className="absolute bg-white border border-gray-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-[1050] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-w-[min(100vw-32px,620px)]"
         style={{ ...style, width: undefined, minWidth: 280 }}
         onMouseDown={(e) => e.preventDefault()}
       >

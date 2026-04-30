@@ -27,18 +27,16 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
 
   const updateDropdownPosition = useCallback(() => {
     const sel = window.getSelection();
-    if (!sel?.rangeCount || !editorRef.current) return;
+    const ed = editorRef.current;
+    if (!sel?.rangeCount || !ed) return;
 
     const live = sel.getRangeAt(0).cloneRange();
     live.collapse(true);
 
     const rects = live.getClientRects();
     let rect: DOMRect =
-      rects.length > 0
-        ? (rects[rects.length - 1] as DOMRect)
-        : (live.getBoundingClientRect() as DOMRect);
+      rects.length > 0 ? (rects[rects.length - 1] as DOMRect) : (live.getBoundingClientRect() as DOMRect);
 
-    // Collapsed caret can report 0×0 — measure an adjacent grapheme inside the text node if possible.
     const sc = live.startContainer;
     if (
       rect.height === 0 &&
@@ -57,18 +55,31 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       }
     }
 
-    if (rect.height || rect.width) {
-      setDropdownPos({
-        top: rect.bottom + 4,
-        left: rect.left,
-      });
-      return;
+    /** Empty `contenteditable` often reports a caret rect as tall as `min-height` — anchor to first visual line instead of rect.bottom */
+    const LINE_ESTIMATE = 22;
+    const CARET_GAP = 12;
+    const DROPDOWN_MAX_W = 620;
+    let topPx: number;
+    let leftPx: number;
+
+    if (rect.height > 48 || rect.width > Math.min(ed.offsetWidth || 640, window.innerWidth) * 0.85) {
+      topPx = rect.top + LINE_ESTIMATE + CARET_GAP;
+      leftPx = rect.left + 2;
+    } else if (rect.height || rect.width) {
+      topPx = rect.bottom + CARET_GAP;
+      leftPx = rect.left;
+    } else {
+      const er = ed.getBoundingClientRect();
+      topPx = er.top + LINE_ESTIMATE + CARET_GAP;
+      leftPx = Math.max(er.left + 8, 8);
     }
 
-    const er = editorRef.current.getBoundingClientRect();
+    const pad = 8;
+    leftPx = Math.max(pad, Math.min(leftPx, window.innerWidth - DROPDOWN_MAX_W - pad));
+
     setDropdownPos({
-      top: Math.max(er.top + 6, 6),
-      left: Math.max(er.left + 6, 6),
+      top: topPx,
+      left: leftPx,
     });
   }, []);
 
@@ -364,6 +375,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
               position: 'fixed',
               top: `${dropdownPos.top}px`,
               left: `${dropdownPos.left}px`,
+              zIndex: 1050,
             }}
           />
         )}
