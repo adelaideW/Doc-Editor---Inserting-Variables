@@ -210,7 +210,16 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
           </button>
         )}
 
-        <div className="flex flex-col py-2 overflow-y-auto max-h-[400px]">
+        {searchQuery.trim().length > 0 && (
+          <div className="px-4 pt-3 pb-1 text-[11px] text-gray-500 border-b border-gray-50">
+            Searching:{' '}
+            <span className="font-medium text-gray-700" title={searchQuery}>
+              “{searchQuery}”
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-col py-2 overflow-y-auto max-h-[min(460px,calc(100vh-220px))]">
           {filteredItems.length > 0 ? (
             filteredItems.map((item, index) => {
               const isFocused = index === activeIndex;
