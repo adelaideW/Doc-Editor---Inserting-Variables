@@ -51,11 +51,15 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   const [isEmpty, setIsEmpty] = useState(true);
   showDropdownRef.current = showDropdown;
 
-  const recipientMatches = recipientPicker.query.trim()
-    ? EMPLOYEE_DIRECTORY.filter((name) =>
-        name.toLowerCase().includes(recipientPicker.query.trim().toLowerCase())
-      )
-    : EMPLOYEE_DIRECTORY;
+  const recipientMatches = React.useMemo(() => {
+    const query = recipientPicker.query.trim().toLowerCase();
+    if (!query) return EMPLOYEE_DIRECTORY;
+    const tokens = query.split(/\s+/).filter(Boolean);
+    return EMPLOYEE_DIRECTORY.filter((name) => {
+      const lowered = name.toLowerCase();
+      return tokens.every((token) => lowered.includes(token));
+    });
+  }, [recipientPicker.query]);
 
   const closeRecipientPicker = useCallback(() => {
     recipientChipRef.current = null;
@@ -598,14 +602,22 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
                 <button
                   key={name}
                   type="button"
-                  className="w-full px-4 py-2 text-left text-[14px] text-gray-700 hover:bg-gray-50"
+                  className="w-full px-4 py-2 text-left text-[14px] text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                   onClick={() => resolveChipRecipient(name)}
                 >
-                  {name}
+                  <span className="h-8 w-8 rounded-full bg-[#7A005D]/10 text-[#7A005D] text-[12px] font-semibold flex items-center justify-center shrink-0">
+                    {name
+                      .split(' ')
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join('')
+                      .toUpperCase()}
+                  </span>
+                  <span className="truncate">{name}</span>
                 </button>
               ))}
               {recipientMatches.length === 0 && (
-                <div className="px-4 py-5 text-[13px] text-gray-400">No employees found</div>
+                <div className="px-4 py-5 text-[13px] text-gray-400">No results found</div>
               )}
             </div>
           </div>
