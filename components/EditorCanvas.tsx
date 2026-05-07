@@ -8,6 +8,20 @@ interface Props {
   insertTrigger?: number;
 }
 
+const EMPLOYEE_DIRECTORY = Array.from({ length: 40 }, (_, i) => {
+  const firstNames = [
+    'Avery', 'Jordan', 'Riley', 'Cameron', 'Taylor', 'Morgan', 'Casey', 'Reese', 'Parker', 'Quinn',
+    'Drew', 'Alex', 'Skyler', 'Emerson', 'Hayden', 'Logan', 'Rowan', 'Sage', 'Blake', 'Dakota'
+  ];
+  const lastNames = [
+    'Nguyen', 'Patel', 'Kim', 'Garcia', 'Lopez', 'Brown', 'Johnson', 'Lee', 'Wilson', 'Martinez',
+    'Thomas', 'Anderson', 'Jackson', 'White', 'Harris', 'Clark', 'Lewis', 'Walker', 'Allen', 'Young'
+  ];
+  const first = firstNames[i % firstNames.length];
+  const last = lastNames[(i * 3) % lastNames.length];
+  return `${first} ${last}`;
+});
+
 const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiInput, setShowAiInput] = useState(false);
@@ -18,14 +32,62 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [filteredItems, setFilteredItems] = useState<VariableItem[]>([]);
+  const [recipientPicker, setRecipientPicker] = useState({
+    isOpen: false,
+    top: 0,
+    left: 0,
+    query: '',
+  });
   
   const editorRef = useRef<HTMLDivElement>(null);
   const variableDropdownRef = useRef<VariableDropdownHandle>(null);
+  const recipientChipRef = useRef<HTMLElement | null>(null);
+  const recipientInputRef = useRef<HTMLInputElement | null>(null);
   const showDropdownRef = useRef(false);
   /** Plain-text node replacing a chip during “keyword edit” mode; filter text is visible in the doc */
   const breakoutTextRef = useRef<Text | null>(null);
+  /** True after Cmd/Ctrl+A while dropdown is open — next Delete/Backspace clears the whole query. */
+  const searchSelectAllRef = useRef(false);
   const [isEmpty, setIsEmpty] = useState(true);
   showDropdownRef.current = showDropdown;
+
+  const recipientMatches = recipientPicker.query.trim()
+    ? EMPLOYEE_DIRECTORY.filter((name) =>
+        name.toLowerCase().includes(recipientPicker.query.trim().toLowerCase())
+      )
+    : EMPLOYEE_DIRECTORY;
+
+  const closeRecipientPicker = useCallback(() => {
+    recipientChipRef.current = null;
+    setRecipientPicker((prev) => ({ ...prev, isOpen: false, query: '' }));
+  }, []);
+
+  const applyChipVisualState = useCallback((chip: HTMLElement, warning: boolean) => {
+    chip.className = warning
+      ? "variable-chip inline-flex items-center px-2 py-0.5 mx-0.5 rounded bg-amber-50 border border-amber-300 text-[14px] text-amber-900 font-medium select-none align-baseline leading-tight transition-all duration-200 cursor-pointer group"
+      : "variable-chip inline-flex items-center px-2 py-0.5 mx-0.5 rounded bg-[#7A005D]/5 border border-[#7A005D]/20 text-[14px] text-[#7A005D] font-medium select-none align-baseline leading-tight transition-all duration-200 cursor-default group";
+  }, []);
+
+  const openRecipientPickerForChip = useCallback((chip: HTMLElement) => {
+    const rect = chip.getBoundingClientRect();
+    recipientChipRef.current = chip;
+    setRecipientPicker({
+      isOpen: true,
+      top: rect.top - 6,
+      left: Math.min(rect.right + 8, window.innerWidth - 360),
+      query: '',
+    });
+    requestAnimationFrame(() => recipientInputRef.current?.focus());
+  }, []);
+
+  const resolveChipRecipient = useCallback((name: string) => {
+    const chip = recipientChipRef.current;
+    if (!chip) return;
+    chip.setAttribute('data-related-recipient', name);
+    chip.setAttribute('data-needs-recipient', 'false');
+    applyChipVisualState(chip, false);
+    closeRecipientPicker();
+  }, [applyChipVisualState, closeRecipientPicker]);
 
   const updateDropdownPosition = useCallback(() => {
     const sel = window.getSelection();
@@ -148,11 +210,16 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     };
   }, [showDropdown, updateDropdownPosition]);
 
-  const createChip = (label: string) => {
+  const createChip = (item: VariableItem) => {
+    const label = item.insertLabel ?? item.label;
     const chip = document.createElement('span');
-    chip.className = "variable-chip inline-flex items-center px-2 py-0.5 mx-0.5 rounded bg-[#7A005D]/5 border border-[#7A005D]/20 text-[14px] text-[#7A005D] font-medium select-none align-baseline leading-tight transition-all duration-200 cursor-default group";
+    const warning = item.needsRecipient === true;
+    applyChipVisualState(chip, warning);
     chip.contentEditable = "false";
     chip.setAttribute('data-variable', label);
+    chip.setAttribute('data-variable-path', item.path);
+    chip.setAttribute('data-needs-recipient', warning ? 'true' : 'false');
+    chip.title = item.path;
     
     const labelSpan = document.createElement('span');
     labelSpan.className = 'pointer-events-none';
@@ -170,7 +237,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     return chip;
   };
 
-  const handleVariableSelect = useCallback((label: string) => {
+  const handleVariableSelect = useCallback((item: VariableItem) => {
     if (!editorRef.current) return;
 
     editorRef.current.focus();
@@ -180,7 +247,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     const range = sel.getRangeAt(0).cloneRange();
     range.collapse(true);
 
-    const chip = createChip(label);
+    const chip = createChip(item);
 
     const bo = breakoutTextRef.current;
     if (bo && bo.parentNode) {
@@ -217,7 +284,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     setSearchQuery("");
     setIsEmpty(false);
     setActiveIndex(0);
-  }, []);
+  }, [applyChipVisualState]);
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -227,6 +294,8 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     const detachedBo = breakoutTextRef.current;
     if (detachedBo && !detachedBo.parentNode) {
       breakoutTextRef.current = null;
+      setShowDropdown(false);
+      setSearchQuery('');
     }
 
     const activeBo = breakoutTextRef.current;
@@ -274,6 +343,15 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
         }
       }
     }
+
+    const chip = target.closest('.variable-chip') as HTMLElement | null;
+    if (chip && chip.getAttribute('data-needs-recipient') === 'true') {
+      openRecipientPickerForChip(chip);
+      return;
+    }
+    if (!chip) {
+      closeRecipientPicker();
+    }
     
     if (showDropdown) {
       breakoutTextRef.current = null;
@@ -296,19 +374,35 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
           return;
         }
       } else {
-        if (e.key === 'Backspace') {
-          if (searchQuery.length > 0) {
-            e.preventDefault();
-            setSearchQuery((s) => s.slice(0, -1));
-            requestAnimationFrame(() => updateDropdownPosition());
-            return;
-          }
-          setShowDropdown(false);
-          setSearchQuery('');
+        if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+          e.preventDefault();
+          searchSelectAllRef.current = true;
           return;
         }
 
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          if (searchSelectAllRef.current) {
+            searchSelectAllRef.current = false;
+            e.preventDefault();
+            setSearchQuery('');
+            requestAnimationFrame(() => updateDropdownPosition());
+            return;
+          }
+          if (e.key === 'Backspace') {
+            if (searchQuery.length > 0) {
+              e.preventDefault();
+              setSearchQuery((s) => s.slice(0, -1));
+              requestAnimationFrame(() => updateDropdownPosition());
+              return;
+            }
+            setShowDropdown(false);
+            setSearchQuery('');
+            return;
+          }
+        }
+
         if (!mod && e.key.length === 1) {
+          searchSelectAllRef.current = false;
           e.preventDefault();
           setSearchQuery((s) => s + e.key);
           requestAnimationFrame(() => updateDropdownPosition());
@@ -348,6 +442,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       }
       if (e.key === 'Escape') {
         e.preventDefault();
+        closeRecipientPicker();
         breakoutTextRef.current = null;
         setShowDropdown(false);
         setSearchQuery('');
@@ -478,6 +573,42 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
               zIndex: 1050,
             }}
           />
+        )}
+
+        {recipientPicker.isOpen && (
+          <div
+            className="fixed z-[1200] w-[340px] rounded-xl border border-gray-200 bg-white shadow-[0_18px_45px_rgba(0,0,0,0.16)] overflow-hidden"
+            style={{ top: `${recipientPicker.top}px`, left: `${recipientPicker.left}px` }}
+          >
+            <div className="relative border-b border-gray-100">
+              <input
+                ref={recipientInputRef}
+                type="text"
+                value={recipientPicker.query}
+                onChange={(e) =>
+                  setRecipientPicker((prev) => ({ ...prev, query: e.target.value }))
+                }
+                className="w-full py-3 pl-10 pr-3 text-[15px] text-gray-700 outline-none"
+                placeholder="Search people"
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
+            </div>
+            <div className="max-h-72 overflow-y-auto py-2">
+              {recipientMatches.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className="w-full px-4 py-2 text-left text-[14px] text-gray-700 hover:bg-gray-50"
+                  onClick={() => resolveChipRecipient(name)}
+                >
+                  {name}
+                </button>
+              ))}
+              {recipientMatches.length === 0 && (
+                <div className="px-4 py-5 text-[13px] text-gray-400">No employees found</div>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Floating AI Helper */}

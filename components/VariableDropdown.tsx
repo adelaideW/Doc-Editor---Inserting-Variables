@@ -9,10 +9,15 @@ export interface VariableItem {
   id: string;
   label: string;
   category?: string;
+  path: string;
   /** True when this row drills into nested items (shows ▸). */
   hasChildren?: boolean;
   /** Exact string inserted when this leaf is chosen (defaults to label). */
   insertLabel?: string;
+  searchText: string;
+  recipientType?: 'employee' | 'manager' | 'custom';
+  fieldType?: 'text' | 'checkbox' | 'signature' | 'date-signed';
+  needsRecipient?: boolean;
 }
 
 type LeafWithPath = { node: VariableMenuNode; breadcrumbs: string[] };
@@ -32,24 +37,31 @@ function getChildrenAtPath(root: VariableMenuNode[], pathIds: string[]): Variabl
   return level;
 }
 
-function flattenLeaves(nodes: VariableMenuNode[], breadcrumbs: string[] = [], acc: LeafWithPath[]): void {
+function flattenAll(nodes: VariableMenuNode[], breadcrumbs: string[] = [], acc: LeafWithPath[]): void {
   for (const n of nodes) {
-    if (!hasChildren(n)) {
-      acc.push({ node: n, breadcrumbs });
-    } else {
-      flattenLeaves(n.children!, [...breadcrumbs, n.label], acc);
+    acc.push({ node: n, breadcrumbs });
+    if (hasChildren(n)) {
+      flattenAll(n.children!, [...breadcrumbs, n.label], acc);
     }
   }
 }
 
 function toVariableItemFromNode(n: VariableMenuNode, breadcrumbs: string[]): VariableItem {
   const child = hasChildren(n);
+  const pathParts = [...breadcrumbs, n.label];
+  const path = pathParts.join(' > ');
+  const searchText = [...pathParts, ...(n.searchKeywords ?? [])].join(' ').toLowerCase();
   return {
     id: n.id,
     label: n.label,
     category: breadcrumbs.join(' › ') || 'Variable',
+    path,
     hasChildren: child,
     insertLabel: child ? undefined : n.label,
+    searchText,
+    recipientType: n.recipientType,
+    fieldType: n.fieldType,
+    needsRecipient: n.needsRecipient,
   };
 }
 
@@ -61,7 +73,7 @@ export interface VariableDropdownHandle {
 }
 
 interface VariableDropdownProps {
-  onSelect: (value: string) => void;
+  onSelect: (item: VariableItem) => void;
   searchQuery: string;
   activeIndex: number;
   onFilteredItemsChange?: (items: VariableItem[]) => void;
@@ -74,32 +86,33 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
   ({ onSelect, searchQuery, activeIndex, onFilteredItemsChange, onMenuNavigate, style }, ref) => {
     const [menuPathIds, setMenuPathIds] = useState<string[]>([]);
 
-    const allLeaves = useMemo(() => {
+    const allNodes = useMemo(() => {
       const acc: LeafWithPath[] = [];
-      flattenLeaves(VARIABLE_TREE, [], acc);
+      flattenAll(VARIABLE_TREE, [], acc);
       return acc;
     }, []);
 
     const filteredItems = useMemo(() => {
-      const q = searchQuery.trim().toLowerCase();
-      if (q) {
-        return allLeaves
-          .filter(({ node, breadcrumbs }) => {
-            const hay = [...breadcrumbs, node.label].join(' › ').toLowerCase();
-            return hay.includes(q);
+      const tokens = searchQuery
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+      if (tokens.length > 0) {
+        return allNodes
+          .map(({ node, breadcrumbs }) => toVariableItemFromNode(node, breadcrumbs))
+          .filter((item) => {
+            return tokens.every((token) => item.searchText.includes(token));
           })
-          .map(({ node, breadcrumbs }) => ({
-            id: node.id,
-            label: breadcrumbs.length ? `${breadcrumbs.join(' › ')} › ${node.label}` : node.label,
-            category: breadcrumbs.join(' › '),
-            hasChildren: false,
-            insertLabel: node.label,
+          .map((item) => ({
+            ...item,
+            label: item.category ? `${item.category} › ${item.label}` : item.label,
           }));
       }
 
       const level = getChildrenAtPath(VARIABLE_TREE, menuPathIds);
       return level.map((n) => toVariableItemFromNode(n, []));
-    }, [searchQuery, menuPathIds, allLeaves]);
+    }, [searchQuery, menuPathIds, allNodes]);
 
     const activeIndexRef = useRef(activeIndex);
     const filteredItemsRef = useRef(filteredItems);
@@ -138,7 +151,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
       const q = searchQuery.trim();
       if (q) {
         if (row.insertLabel !== undefined) {
-          onSelect(row.insertLabel);
+          onSelect(row);
           return true;
         }
         return false;
@@ -150,8 +163,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
         return true;
       }
 
-      const value = row.insertLabel ?? row.label;
-      onSelect(value);
+      onSelect(row);
       return true;
     }, [onSelect, searchQuery, onMenuNavigate]);
 
@@ -159,15 +171,14 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
 
     const handleItemClick = (item: VariableItem) => {
       if (searchQuery.trim()) {
-        const v = item.insertLabel ?? item.label;
-        onSelect(v);
+        onSelect(item);
         return;
       }
       if (item.hasChildren) {
         setMenuPathIds((prev) => [...prev, item.id]);
         onMenuNavigate?.();
       } else {
-        onSelect(item.insertLabel ?? item.label);
+        onSelect(item);
       }
     };
 

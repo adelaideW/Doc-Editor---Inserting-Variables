@@ -2,9 +2,51 @@ export type VariableMenuNode = {
   id: string;
   label: string;
   children?: VariableMenuNode[];
+  searchKeywords?: string[];
+  recipientType?: 'employee' | 'manager' | 'custom';
+  fieldType?: 'text' | 'checkbox' | 'signature' | 'date-signed';
+  needsRecipient?: boolean;
 };
 
 const leaf = (id: string, label: string): VariableMenuNode => ({ id, label });
+
+const recipientFieldLeaves = (
+  prefix: string,
+  recipientType: 'employee' | 'manager' | 'custom'
+): VariableMenuNode[] => [
+  {
+    id: `${prefix}.text`,
+    label: 'Text',
+    recipientType,
+    fieldType: 'text',
+    needsRecipient: recipientType === 'custom',
+    searchKeywords: ['field', recipientType, 'recipient', 'text'],
+  },
+  {
+    id: `${prefix}.checkbox`,
+    label: 'Checkbox',
+    recipientType,
+    fieldType: 'checkbox',
+    needsRecipient: recipientType === 'custom',
+    searchKeywords: ['field', recipientType, 'recipient', 'checkbox'],
+  },
+  {
+    id: `${prefix}.signature`,
+    label: 'Signature',
+    recipientType,
+    fieldType: 'signature',
+    needsRecipient: recipientType === 'custom',
+    searchKeywords: ['field', recipientType, 'recipient', 'signature', 'sign'],
+  },
+  {
+    id: `${prefix}.date-signed`,
+    label: 'Date signed',
+    recipientType,
+    fieldType: 'date-signed',
+    needsRecipient: recipientType === 'custom',
+    searchKeywords: ['field', recipientType, 'recipient', 'date', 'signed'],
+  },
+];
 
 function slug(label: string, i: number) {
   const s = label
@@ -119,6 +161,31 @@ const DOCUMENT_EXTENDED_VARS = [
  * Catalog root: merges original Recipient / Document-custom groups with hierarchical navigation.
  */
 export const VARIABLE_TREE: VariableMenuNode[] = [
+  {
+    id: 'root.recipient-fields',
+    label: 'Recipient fields',
+    searchKeywords: ['recipient', 'field', 'recipient fields'],
+    children: [
+      {
+        id: 'recipient.employee',
+        label: 'Employee',
+        searchKeywords: ['employee', 'recipient'],
+        children: recipientFieldLeaves('recipient.employee', 'employee'),
+      },
+      {
+        id: 'recipient.employee-manager',
+        label: "Employee's manager",
+        searchKeywords: ['manager', 'employee manager', 'recipient'],
+        children: recipientFieldLeaves('recipient.employee-manager', 'manager'),
+      },
+      {
+        id: 'recipient.custom',
+        label: 'Custom',
+        searchKeywords: ['custom', 'recipient', 'custom recipient'],
+        children: recipientFieldLeaves('recipient.custom', 'custom'),
+      },
+    ],
+  },
   {
     id: 'root.employee',
     label: 'Employee',

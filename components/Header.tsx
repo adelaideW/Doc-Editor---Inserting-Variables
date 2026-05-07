@@ -4,7 +4,7 @@ import { Search, HelpCircle, User, Bell, LayoutGrid, Info } from 'lucide-react';
 
 const Header: React.FC = () => {
   return (
-    <header className="h-12 border-b border-gray-200 bg-white px-4 flex items-center justify-between z-10">
+    <header className="h-12 border-b border-gray-200 bg-white px-4 my-6 flex items-center justify-between z-10">
       <div className="flex items-center gap-4 flex-1">
         <div className="flex items-center gap-2 cursor-pointer group">
           <span className="text-sm font-semibold text-gray-700">Tools</span>
