@@ -8,7 +8,10 @@ interface Props {
   insertTrigger?: number;
 }
 
-const EMPLOYEE_DIRECTORY = Array.from({ length: 40 }, (_, i) => {
+type EmployeeRecord = { id: string; name: string };
+
+/** 40 rows with stable unique ids — required for list keys (names repeat for i and i+20). */
+const EMPLOYEE_DIRECTORY: EmployeeRecord[] = Array.from({ length: 40 }, (_, i) => {
   const firstNames = [
     'Avery', 'Jordan', 'Riley', 'Cameron', 'Taylor', 'Morgan', 'Casey', 'Reese', 'Parker', 'Quinn',
     'Drew', 'Alex', 'Skyler', 'Emerson', 'Hayden', 'Logan', 'Rowan', 'Sage', 'Blake', 'Dakota'
@@ -19,7 +22,7 @@ const EMPLOYEE_DIRECTORY = Array.from({ length: 40 }, (_, i) => {
   ];
   const first = firstNames[i % firstNames.length];
   const last = lastNames[(i * 3) % lastNames.length];
-  return `${first} ${last}`;
+  return { id: `emp-${i}`, name: `${first} ${last}` };
 });
 
 const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
@@ -55,7 +58,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     const query = recipientSearchQuery.trim().toLowerCase();
     if (!query) return EMPLOYEE_DIRECTORY;
     const tokens = query.split(/\s+/).filter(Boolean);
-    return EMPLOYEE_DIRECTORY.filter((name) => {
+    return EMPLOYEE_DIRECTORY.filter(({ name }) => {
       const lowered = name.toLowerCase();
       return tokens.every((token) => lowered.includes(token));
     });
@@ -584,6 +587,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
           <div
             className="fixed z-[1200] w-[340px] rounded-xl border border-gray-200 bg-white shadow-[0_18px_45px_rgba(0,0,0,0.16)] overflow-hidden"
             style={{ top: `${recipientPicker.top}px`, left: `${recipientPicker.left}px` }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="relative border-b border-gray-100">
               <input
@@ -591,16 +595,16 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
                 type="text"
                 value={recipientSearchQuery}
                 onChange={(e) => setRecipientSearchQuery(e.target.value)}
-                onInput={(e) => setRecipientSearchQuery((e.target as HTMLInputElement).value)}
                 className="w-full py-3 pl-10 pr-3 text-[15px] text-gray-700 outline-none"
                 placeholder="Search people"
+                autoComplete="off"
               />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
             </div>
             <div className="max-h-72 overflow-y-auto py-2">
-              {recipientMatches.map((name) => (
+              {recipientMatches.map(({ id, name }) => (
                 <button
-                  key={name}
+                  key={id}
                   type="button"
                   className="w-full px-4 py-2 text-left text-[14px] text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                   onClick={() => resolveChipRecipient(name)}
