@@ -46,11 +46,13 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     left: 0,
   });
   const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
+  const [recipientHighlightIndex, setRecipientHighlightIndex] = useState(0);
   
   const editorRef = useRef<HTMLDivElement>(null);
   const variableDropdownRef = useRef<VariableDropdownHandle>(null);
   const recipientChipRef = useRef<HTMLElement | null>(null);
   const recipientInputRef = useRef<HTMLInputElement | null>(null);
+  const recipientScrollRef = useRef<HTMLDivElement | null>(null);
   const showDropdownRef = useRef(false);
   /** Plain-text node replacing a chip during “keyword edit” mode; filter text is visible in the doc */
   const breakoutTextRef = useRef<Text | null>(null);
@@ -69,10 +71,28 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     });
   }, [recipientSearchQuery]);
 
+  const recipientHl =
+    recipientMatches.length === 0
+      ? 0
+      : Math.min(recipientHighlightIndex, recipientMatches.length - 1);
+
+  useEffect(() => {
+    if (!recipientPicker.isOpen) return;
+    setRecipientHighlightIndex(0);
+  }, [recipientPicker.isOpen, recipientSearchQuery]);
+
+  useLayoutEffect(() => {
+    if (!recipientPicker.isOpen || recipientMatches.length === 0) return;
+    const pane = recipientScrollRef.current;
+    const el = pane?.querySelector<HTMLElement>(`[data-recipient-highlight-index="${recipientHl}"]`);
+    el?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+  }, [recipientPicker.isOpen, recipientHl, recipientMatches]);
+
   const closeRecipientPicker = useCallback(() => {
     recipientChipRef.current = null;
     setRecipientPicker((prev) => ({ ...prev, isOpen: false }));
     setRecipientSearchQuery('');
+    setRecipientHighlightIndex(0);
   }, []);
 
   const applyChipVisualState = useCallback((chip: HTMLElement, warning: boolean) => {
@@ -601,20 +621,66 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
               <input
                 ref={recipientInputRef}
                 type="text"
+                role="combobox"
+                aria-expanded={recipientMatches.length > 0}
+                aria-controls="recipient-picker-listbox"
+                aria-activedescendant={
+                  recipientMatches.length > 0
+                    ? `recipient-option-${recipientMatches[recipientHl]?.id ?? ''}`
+                    : undefined
+                }
                 value={recipientSearchQuery}
                 onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeRecipientPicker();
+                    return;
+                  }
+                  const len = recipientMatches.length;
+                  if (len === 0) return;
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setRecipientHighlightIndex((i) => (i + 1) % len);
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setRecipientHighlightIndex((i) => (i - 1 + len) % len);
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const pick = recipientMatches[recipientHl];
+                    if (pick) resolveChipRecipient(pick);
+                  }
+                }}
                 className="w-full py-3 pl-10 pr-3 text-[15px] text-gray-700 outline-none"
                 placeholder="Search people"
                 autoComplete="off"
               />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
             </div>
-            <div className="max-h-72 overflow-y-auto py-2">
-              {recipientMatches.map((employee) => (
+            <div
+              id="recipient-picker-listbox"
+              ref={recipientScrollRef}
+              role="listbox"
+              aria-label="People"
+              className="max-h-72 overflow-y-auto py-2"
+            >
+              {recipientMatches.map((employee, index) => (
                 <button
                   key={employee.id}
+                  id={`recipient-option-${employee.id}`}
+                  role="option"
                   type="button"
-                  className="w-full px-4 py-2 text-left text-[14px] text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                  data-recipient-highlight-index={index}
+                  aria-selected={index === recipientHl}
+                  className={`w-full px-4 py-2 text-left text-[14px] text-gray-700 flex items-center gap-3 ${
+                    index === recipientHl ? 'bg-[#7A005D]/8' : 'hover:bg-gray-50'
+                  }`}
+                  onMouseEnter={() => setRecipientHighlightIndex(index)}
                   onClick={() => resolveChipRecipient(employee)}
                 >
                   <img

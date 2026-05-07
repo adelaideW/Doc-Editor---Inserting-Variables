@@ -5,6 +5,7 @@ import Header from './components/Header';
 import Toolbar from './components/Toolbar';
 import DocumentHeader from './components/DocumentHeader';
 import EditorCanvas from './components/EditorCanvas';
+import { PortfolioReturnLink } from './components/PortfolioReturnLink';
 
 const App: React.FC = () => {
   const [docTitle, setDocTitle] = useState("Untitled template 09/16/2025 12:27 PM");
@@ -16,6 +17,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden text-gray-900 selection:bg-[#7A005D]/20 selection:text-[#7A005D]">
+      <PortfolioReturnLink />
       {/* Sidebar Navigation */}
       <Sidebar />
 
