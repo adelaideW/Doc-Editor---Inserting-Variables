@@ -8,7 +8,7 @@ interface Props {
   insertTrigger?: number;
 }
 
-type EmployeeRecord = { id: string; name: string };
+type EmployeeRecord = { id: string; name: string; avatarUrl: string };
 
 /** 40 rows with stable unique ids — required for list keys (names repeat for i and i+20). */
 const EMPLOYEE_DIRECTORY: EmployeeRecord[] = Array.from({ length: 40 }, (_, i) => {
@@ -22,7 +22,12 @@ const EMPLOYEE_DIRECTORY: EmployeeRecord[] = Array.from({ length: 40 }, (_, i) =
   ];
   const first = firstNames[i % firstNames.length];
   const last = lastNames[(i * 3) % lastNames.length];
-  return { id: `emp-${i}`, name: `${first} ${last}` };
+  const id = `emp-${i}`;
+  return {
+    id,
+    name: `${first} ${last}`,
+    avatarUrl: `https://i.pravatar.cc/128?img=${(i % 70) + 1}`,
+  };
 });
 
 const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
@@ -88,11 +93,14 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     requestAnimationFrame(() => recipientInputRef.current?.focus());
   }, []);
 
-  const resolveChipRecipient = useCallback((name: string) => {
+  const resolveChipRecipient = useCallback((employee: EmployeeRecord) => {
     const chip = recipientChipRef.current;
     if (!chip) return;
-    chip.setAttribute('data-related-recipient', name);
+    chip.setAttribute('data-related-recipient', employee.name);
+    chip.setAttribute('data-related-recipient-id', employee.id);
     chip.setAttribute('data-needs-recipient', 'false');
+    chip.title =
+      `${chip.getAttribute('data-variable-path') ?? ''} — ${employee.name} (${employee.id})`.trim();
     applyChipVisualState(chip, false);
     closeRecipientPicker();
   }, [applyChipVisualState, closeRecipientPicker]);
@@ -602,22 +610,24 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
             </div>
             <div className="max-h-72 overflow-y-auto py-2">
-              {recipientMatches.map(({ id, name }) => (
+              {recipientMatches.map((employee) => (
                 <button
-                  key={id}
+                  key={employee.id}
                   type="button"
                   className="w-full px-4 py-2 text-left text-[14px] text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                  onClick={() => resolveChipRecipient(name)}
+                  onClick={() => resolveChipRecipient(employee)}
                 >
-                  <span className="h-8 w-8 rounded-full bg-[#7A005D]/10 text-[#7A005D] text-[12px] font-semibold flex items-center justify-center shrink-0">
-                    {name
-                      .split(' ')
-                      .slice(0, 2)
-                      .map((part) => part[0])
-                      .join('')
-                      .toUpperCase()}
-                  </span>
-                  <span className="truncate">{name}</span>
+                  <img
+                    src={employee.avatarUrl}
+                    alt=""
+                    width={32}
+                    height={32}
+                    loading="lazy"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    className="h-8 w-8 rounded-full object-cover shrink-0 ring-1 ring-gray-200 bg-gray-100"
+                  />
+                  <span className="truncate">{employee.name}</span>
                 </button>
               ))}
               {recipientMatches.length === 0 && (
