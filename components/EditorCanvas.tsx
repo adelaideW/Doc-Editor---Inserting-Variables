@@ -36,8 +36,8 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     isOpen: false,
     top: 0,
     left: 0,
-    query: '',
   });
+  const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
   
   const editorRef = useRef<HTMLDivElement>(null);
   const variableDropdownRef = useRef<VariableDropdownHandle>(null);
@@ -52,18 +52,19 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
   showDropdownRef.current = showDropdown;
 
   const recipientMatches = React.useMemo(() => {
-    const query = recipientPicker.query.trim().toLowerCase();
+    const query = recipientSearchQuery.trim().toLowerCase();
     if (!query) return EMPLOYEE_DIRECTORY;
     const tokens = query.split(/\s+/).filter(Boolean);
     return EMPLOYEE_DIRECTORY.filter((name) => {
       const lowered = name.toLowerCase();
       return tokens.every((token) => lowered.includes(token));
     });
-  }, [recipientPicker.query]);
+  }, [recipientSearchQuery]);
 
   const closeRecipientPicker = useCallback(() => {
     recipientChipRef.current = null;
-    setRecipientPicker((prev) => ({ ...prev, isOpen: false, query: '' }));
+    setRecipientPicker((prev) => ({ ...prev, isOpen: false }));
+    setRecipientSearchQuery('');
   }, []);
 
   const applyChipVisualState = useCallback((chip: HTMLElement, warning: boolean) => {
@@ -79,8 +80,8 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       isOpen: true,
       top: rect.top - 6,
       left: Math.min(rect.right + 8, window.innerWidth - 360),
-      query: '',
     });
+    setRecipientSearchQuery('');
     requestAnimationFrame(() => recipientInputRef.current?.focus());
   }, []);
 
@@ -588,10 +589,9 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
               <input
                 ref={recipientInputRef}
                 type="text"
-                value={recipientPicker.query}
-                onChange={(e) =>
-                  setRecipientPicker((prev) => ({ ...prev, query: e.target.value }))
-                }
+                value={recipientSearchQuery}
+                onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                onInput={(e) => setRecipientSearchQuery((e.target as HTMLInputElement).value)}
                 className="w-full py-3 pl-10 pr-3 text-[15px] text-gray-700 outline-none"
                 placeholder="Search people"
               />
