@@ -41,7 +41,7 @@ export function PortfolioReturnLink() {
   return (
     <a
       href={href}
-      className="fixed left-1/2 top-4 z-[2147483647] max-w-[min(calc(100vw-2rem),22rem)] -translate-x-1/2 whitespace-normal text-center text-[13px] leading-snug font-semibold text-neutral-950 rounded-full border border-neutral-200 bg-white px-4 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.05)] transition-[box-shadow,border-color,background-color] duration-150 hover:border-neutral-300 hover:shadow-[0_6px_24px_rgba(0,0,0,0.1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
+      className="fixed left-1/2 top-4 z-[2147483647] max-w-[min(calc(100vw-2rem),20rem)] -translate-x-1/2 whitespace-normal text-center text-[12px] leading-tight font-semibold text-neutral-950 rounded-[10px] border border-neutral-200 bg-white px-3 py-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.05)] transition-[box-shadow,border-color,background-color] duration-150 hover:border-neutral-300 hover:shadow-[0_6px_24px_rgba(0,0,0,0.1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
     >
       Back to Adelaide's portfolio
     </a>
