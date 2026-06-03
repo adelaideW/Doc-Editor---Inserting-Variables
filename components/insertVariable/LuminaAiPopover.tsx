@@ -64,10 +64,10 @@ const LuminaAiPopover: React.FC<Props> = ({
           type="button"
           disabled={!canGenerate}
           onClick={onGenerate}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-semibold border-0 transition-colors ${
+          className={`inline-flex items-center gap-2 px-5 py-1.5 rounded-full text-[13px] font-bold border-0 transition-all ${
             canGenerate
-              ? 'bg-[#9B7A9E] text-white hover:bg-[#8A6A8D]'
-              : 'bg-[#E5E0E5] text-gray-400 cursor-not-allowed'
+              ? 'bg-[#7A005D] text-white hover:bg-[#66004D] shadow-sm'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
           }`}
         >
           {loading && <Loader2 size={14} className="animate-spin" />}
