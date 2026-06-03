@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { Sparkles, Loader2, Wand2 } from 'lucide-react';
-import { gemini } from '../services/gemini';
 import VariableDropdown, { VariableItem, VariableDropdownHandle } from './VariableDropdown';
 import {
   usesAddVariablesModal,
@@ -551,7 +550,7 @@ const EditorCanvas: React.FC<Props> = ({
     setAiPrompt('');
   }, [computeCaretAnchor]);
 
-  const handleLuminaGenerate = useCallback(async () => {
+  const handleCanvasAiGenerate = useCallback(async () => {
     const ed = editorRef.current;
     if (!ed || !aiPrompt.trim()) return;
     setAiLoading(true);
@@ -559,6 +558,7 @@ const EditorCanvas: React.FC<Props> = ({
     ed.innerHTML = offerLetterDemoHtml();
     setIsEmpty(false);
     setAiPopoverOpen(false);
+    setShowAiInput(false);
     setAiPrompt('');
     setAiLoading(false);
     refreshUsedVariables();
@@ -1244,22 +1244,6 @@ const EditorCanvas: React.FC<Props> = ({
     }
   };
 
-  const handleAiAction = async () => {
-    if (!aiPrompt || !editorRef.current) return;
-    setAiLoading(true);
-    const result = await gemini.generateDraft(aiPrompt);
-    if (result) {
-      const div = document.createElement('div');
-      div.className = "mt-4 text-[#1A1A1A]";
-      div.innerText = result;
-      editorRef.current.appendChild(div);
-      setIsEmpty(false);
-      setShowAiInput(false);
-      setAiPrompt("");
-    }
-    setAiLoading(false);
-  };
-
   return (
     <div className="flex flex-1 min-h-0 w-full overflow-hidden">
       {insertVersion === 'v1_5' && (
@@ -1406,7 +1390,7 @@ const EditorCanvas: React.FC<Props> = ({
               setAiPopoverOpen(false);
               setAiPrompt('');
             }}
-            onGenerate={handleLuminaGenerate}
+            onGenerate={handleCanvasAiGenerate}
           />
         )}
 
@@ -1429,7 +1413,15 @@ const EditorCanvas: React.FC<Props> = ({
               />
               <div className="flex justify-end gap-2">
                 <button onClick={() => setShowAiInput(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">Cancel</button>
-                <button onClick={handleAiAction} disabled={aiLoading} className="px-3 py-1.5 text-xs bg-[#7A005D] text-white rounded-md hover:bg-[#66004D] disabled:opacity-50 flex items-center gap-2 font-semibold">
+                <button
+                  onClick={handleCanvasAiGenerate}
+                  disabled={aiLoading || !aiPrompt.trim()}
+                  className={`px-3 py-1.5 text-xs rounded-md flex items-center gap-2 font-semibold border-0 transition-colors ${
+                    aiPrompt.trim()
+                      ? 'bg-[#7A005D] text-white hover:bg-[#66004D] shadow-sm'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  } disabled:opacity-50`}
+                >
                   {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
                   Generate
                 </button>
