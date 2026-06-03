@@ -6,6 +6,7 @@ import VariableDropdown, {
 } from '../VariableDropdown';
 import type { CombinedSearchItem } from './combinedMenuSearch';
 import {
+  IMPORT_ROW,
   INSERT_VARIABLES_ROW,
   SLASH_BLOCK_ROWS,
   type SlashMenuItemId,
@@ -176,8 +177,29 @@ const CombinedInsertMenu: React.FC<Props> = ({
             />
           </button>
 
+          <button
+            type="button"
+            onMouseEnter={() => onRootRowHover(1)}
+            onClick={() => onBlockSelect('import')}
+            className={`w-full text-left px-3 py-2.5 flex gap-3 items-start border-0 transition-colors ${
+              rootActiveIndex === 1
+                ? 'bg-gray-100 cursor-pointer'
+                : 'bg-white hover:bg-gray-50 cursor-pointer'
+            }`}
+          >
+            <span className="mt-0.5">{IMPORT_ROW.icon}</span>
+            <span className="min-w-0 flex-1">
+              <span className={`block text-[14px] ${rootActiveIndex === 1 ? 'font-medium text-gray-900' : 'text-gray-800'}`}>
+                {IMPORT_ROW.label}
+              </span>
+              {IMPORT_ROW.subtitle && (
+                <span className="block text-[11px] text-gray-500 mt-0.5 leading-snug">{IMPORT_ROW.subtitle}</span>
+              )}
+            </span>
+          </button>
+
           {SLASH_BLOCK_ROWS.map((row, index) => {
-            const rowIndex = index + 1;
+            const rowIndex = index + 2;
             const active = rootActiveIndex === rowIndex;
             return (
               <button

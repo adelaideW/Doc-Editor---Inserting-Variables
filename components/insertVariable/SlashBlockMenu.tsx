@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Code,
+  FileUp,
   Link,
   List,
   ListOrdered,
@@ -12,6 +13,7 @@ import {
 
 export type SlashMenuItemId =
   | 'insert-variables'
+  | 'import'
   | 'bulleted-list'
   | 'numbered-list'
   | 'link'
@@ -34,6 +36,12 @@ export const SLASH_MENU_ROWS: MenuRow[] = [
     subtitle: 'Variables insert data from the object graph and are not editable when sending.',
     icon: <Variable size={16} className="text-gray-600 shrink-0" />,
   },
+  {
+    id: 'import',
+    label: 'Import',
+    subtitle: 'Upload a file or paste a link to replace document content.',
+    icon: <FileUp size={16} className="text-gray-500 shrink-0" />,
+  },
   { id: 'bulleted-list', label: 'Bulleted list', icon: <List size={16} className="text-gray-500 shrink-0" /> },
   { id: 'numbered-list', label: 'Numbered list', icon: <ListOrdered size={16} className="text-gray-500 shrink-0" /> },
   { id: 'link', label: 'Link', icon: <Link size={16} className="text-gray-500 shrink-0" /> },
@@ -43,9 +51,12 @@ export const SLASH_MENU_ROWS: MenuRow[] = [
   { id: 'code-snippet', label: 'Code snippet', icon: <Code size={16} className="text-gray-500 shrink-0" /> },
 ];
 
-export const SLASH_BLOCK_ROWS = SLASH_MENU_ROWS.filter((row) => row.id !== 'insert-variables');
+export const SLASH_BLOCK_ROWS = SLASH_MENU_ROWS.filter(
+  (row) => row.id !== 'insert-variables' && row.id !== 'import'
+);
 
 export const INSERT_VARIABLES_ROW = SLASH_MENU_ROWS[0];
+export const IMPORT_ROW = SLASH_MENU_ROWS[1];
 
 interface Props {
   top: number;

@@ -33,3 +33,11 @@ export function usesInlineVariableDropdown(version: InsertVersion): boolean {
 export function usesCombinedInsertMenu(version: InsertVersion): boolean {
   return version === 'v3_5';
 }
+
+export function showsRecipientFieldsHeaderButton(version: InsertVersion): boolean {
+  return version === 'v1' || version === 'v1_5' || version === 'v2';
+}
+
+export function usesRecipientChipPicker(version: InsertVersion): boolean {
+  return version === 'v2_5' || version === 'ideal' || version === 'v3_5';
+}

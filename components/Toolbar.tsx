@@ -5,18 +5,27 @@ import {
   Bold, Italic, Underline, Strikethrough, Code, Highlighter,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Indent, Outdent, Link, Image, MessageSquare,
-  Sparkles, Type, Palette, Scissors
+  Sparkles, Type, Palette, Scissors, FileUp
 } from 'lucide-react';
 
-const Toolbar: React.FC = () => {
+interface Props {
+  onImport?: () => void;
+}
+
+const Toolbar: React.FC<Props> = ({ onImport }) => {
   const Group: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="flex items-center gap-0.5 px-2 border-r border-gray-200 last:border-r-0">
       {children}
     </div>
   );
 
-  const ToolBtn: React.FC<{ icon: React.ReactNode; active?: boolean; dropdown?: boolean }> = ({ icon, active, dropdown }) => (
-    <button className={`p-1.5 rounded flex items-center justify-center hover:bg-gray-100 transition-colors ${active ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}>
+  const ToolBtn: React.FC<{ icon: React.ReactNode; active?: boolean; dropdown?: boolean; onClick?: () => void; title?: string }> = ({ icon, active, dropdown, onClick, title }) => (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`p-1.5 rounded flex items-center justify-center hover:bg-gray-100 transition-colors ${active ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
+    >
       {icon}
       {dropdown && <ChevronDown size={12} className="ml-0.5 opacity-60" />}
     </button>
@@ -81,7 +90,8 @@ const Toolbar: React.FC = () => {
 
       <Group>
         <ToolBtn icon={<Type size={16} />} dropdown />
-        <ToolBtn icon={<Scissors size={16} />} />
+        <ToolBtn icon={<Scissors size={16} />} title="Cut" />
+        <ToolBtn icon={<FileUp size={16} />} title="Import" onClick={onImport} />
       </Group>
     </div>
   );

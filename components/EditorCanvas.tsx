@@ -6,6 +6,7 @@ import VariableDropdown, { VariableItem, VariableDropdownHandle } from './Variab
 import {
   usesAddVariablesModal,
   usesCombinedInsertMenu,
+  usesRecipientChipPicker,
   usesSidePanel,
   type InsertVersion,
 } from './insertVersions';
@@ -36,6 +37,11 @@ import {
   searchCombinedMenu,
 } from './insertVariable/combinedMenuSearch';
 import InsertLinkModal from './insertVariable/InsertLinkModal';
+import ImportModal from './insertVariable/ImportModal';
+import { applyImportToEditor, augmentItemForInsert } from './insertVariable/importContent';
+import RecipientAssignPopover, {
+  type RecipientSelection,
+} from './insertVariable/RecipientAssignPopover';
 import {
   codeSnippetHtml,
   linkHtml,
@@ -47,6 +53,9 @@ import { collectUsedVariableIds } from './insertVariable/collectUsedVariableIds'
 interface Props {
   insertTrigger?: number;
   insertVersion: InsertVersion;
+  importModalOpen?: boolean;
+  onImportModalOpenChange?: (open: boolean) => void;
+  onDocumentChange?: () => void;
 }
 
 type EmployeeRecord = { id: string; name: string; avatarUrl: string };
@@ -71,7 +80,13 @@ const EMPLOYEE_DIRECTORY: EmployeeRecord[] = Array.from({ length: 40 }, (_, i) =
   };
 });
 
-const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
+const EditorCanvas: React.FC<Props> = ({
+  insertTrigger,
+  insertVersion,
+  importModalOpen = false,
+  onImportModalOpenChange,
+  onDocumentChange,
+}) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiInput, setShowAiInput] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -95,14 +110,11 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     top: 0,
     left: 0,
   });
-  const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
-  const [recipientHighlightIndex, setRecipientHighlightIndex] = useState(0);
+  const [selectedRecipientId, setSelectedRecipientId] = useState<string | null>(null);
   
   const editorRef = useRef<HTMLDivElement>(null);
   const variableDropdownRef = useRef<VariableDropdownHandle>(null);
   const recipientChipRef = useRef<HTMLElement | null>(null);
-  const recipientInputRef = useRef<HTMLInputElement | null>(null);
-  const recipientScrollRef = useRef<HTMLDivElement | null>(null);
   const showDropdownRef = useRef(false);
   /** Plain-text node replacing a chip during “keyword edit” mode; filter text is visible in the doc */
   const breakoutTextRef = useRef<Text | null>(null);
@@ -122,38 +134,14 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     setUsedVariableIds(collectUsedVariableIds(editorRef.current));
   }, []);
 
-  const recipientMatches = React.useMemo(() => {
-    const query = recipientSearchQuery.trim().toLowerCase();
-    if (!query) return EMPLOYEE_DIRECTORY;
-    const tokens = query.split(/\s+/).filter(Boolean);
-    return EMPLOYEE_DIRECTORY.filter(({ name }) => {
-      const lowered = name.toLowerCase();
-      return tokens.every((token) => lowered.includes(token));
-    });
-  }, [recipientSearchQuery]);
-
-  const recipientHl =
-    recipientMatches.length === 0
-      ? 0
-      : Math.min(recipientHighlightIndex, recipientMatches.length - 1);
-
-  useEffect(() => {
-    if (!recipientPicker.isOpen) return;
-    setRecipientHighlightIndex(0);
-  }, [recipientPicker.isOpen, recipientSearchQuery]);
-
-  useLayoutEffect(() => {
-    if (!recipientPicker.isOpen || recipientMatches.length === 0) return;
-    const pane = recipientScrollRef.current;
-    const el = pane?.querySelector<HTMLElement>(`[data-recipient-highlight-index="${recipientHl}"]`);
-    el?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
-  }, [recipientPicker.isOpen, recipientHl, recipientMatches]);
+  const notifyChange = useCallback(() => {
+    onDocumentChange?.();
+  }, [onDocumentChange]);
 
   const closeRecipientPicker = useCallback(() => {
     recipientChipRef.current = null;
     setRecipientPicker((prev) => ({ ...prev, isOpen: false }));
-    setRecipientSearchQuery('');
-    setRecipientHighlightIndex(0);
+    setSelectedRecipientId(null);
   }, []);
 
   const closeAllInsertOverlays = useCallback(() => {
@@ -219,26 +207,38 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
   const openRecipientPickerForChip = useCallback((chip: HTMLElement) => {
     const rect = chip.getBoundingClientRect();
     recipientChipRef.current = chip;
+    setSelectedRecipientId(chip.getAttribute('data-related-recipient-id'));
     setRecipientPicker({
       isOpen: true,
-      top: rect.top - 6,
-      left: Math.min(rect.right + 8, window.innerWidth - 360),
+      top: rect.bottom + 8,
+      left: Math.min(rect.left, window.innerWidth - 360),
     });
-    setRecipientSearchQuery('');
-    requestAnimationFrame(() => recipientInputRef.current?.focus());
   }, []);
 
-  const resolveChipRecipient = useCallback((employee: EmployeeRecord) => {
-    const chip = recipientChipRef.current;
-    if (!chip) return;
-    chip.setAttribute('data-related-recipient', employee.name);
-    chip.setAttribute('data-related-recipient-id', employee.id);
-    chip.setAttribute('data-needs-recipient', 'false');
-    chip.title =
-      `${chip.getAttribute('data-variable-path') ?? ''} — ${employee.name} (${employee.id})`.trim();
-    applyChipVisualState(chip, false);
-    closeRecipientPicker();
-  }, [applyChipVisualState, closeRecipientPicker]);
+  const resolveChipRecipient = useCallback(
+    (selection: RecipientSelection) => {
+      const chip = recipientChipRef.current;
+      if (!chip) return;
+
+      if (selection.kind === 'placeholder') {
+        chip.setAttribute('data-related-recipient', selection.label);
+        chip.setAttribute('data-related-recipient-id', selection.id);
+        chip.setAttribute('data-recipient-kind', 'placeholder');
+      } else {
+        chip.setAttribute('data-related-recipient', selection.employee.name);
+        chip.setAttribute('data-related-recipient-id', selection.employee.id);
+        chip.setAttribute('data-recipient-kind', 'internal');
+      }
+
+      chip.setAttribute('data-needs-recipient', 'false');
+      chip.title =
+        `${chip.getAttribute('data-variable') ?? ''} — ${chip.getAttribute('data-related-recipient') ?? ''}`.trim();
+      applyChipVisualState(chip, false);
+      closeRecipientPicker();
+      notifyChange();
+    },
+    [applyChipVisualState, closeRecipientPicker, notifyChange]
+  );
 
   const computeCaretAnchor = useCallback(() => {
     const sel = window.getSelection();
@@ -430,7 +430,8 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     setSearchActiveIndex(0);
     breakoutTextRef.current = null;
     refreshUsedVariables();
-  }, [refreshUsedVariables]);
+    notifyChange();
+  }, [refreshUsedVariables, notifyChange]);
 
   const handleVariableSelect = useCallback((item: VariableItem) => {
     const ed = editorRef.current;
@@ -438,11 +439,11 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
 
     insertVariableAtCaret({
       editorEl: ed,
-      item,
+      item: augmentItemForInsert(item, insertVersion),
       breakoutText: breakoutTextRef.current,
       onInserted: afterChipInserted,
     });
-  }, [afterChipInserted]);
+  }, [afterChipInserted, insertVersion]);
 
   const handleSharedInsert = useCallback(
     (item: VariableItem) => {
@@ -451,14 +452,15 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       ed.focus();
       insertVariableAtCaret({
         editorEl: ed,
-        item,
+        item: augmentItemForInsert(item, insertVersion),
         onInserted: () => {
           setIsEmpty(false);
           refreshUsedVariables();
+          notifyChange();
         },
       });
     },
-    [refreshUsedVariables]
+    [refreshUsedVariables, insertVersion, notifyChange]
   );
 
   const removeSlashBeforeCaret = useCallback(() => {
@@ -527,6 +529,11 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       return;
     }
 
+    if (id === 'import') {
+      onImportModalOpenChange?.(true);
+      return;
+    }
+
     if (id === 'link') {
       setLinkModalOpen(true);
       return;
@@ -543,7 +550,10 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     }
 
     const htmlById: Record<
-      Exclude<SlashMenuItemId, 'insert-variables' | 'link' | 'bulleted-list' | 'numbered-list'>,
+      Exclude<
+        SlashMenuItemId,
+        'insert-variables' | 'import' | 'link' | 'bulleted-list' | 'numbered-list'
+      >,
       string
     > = {
       divider: '<hr><p><br></p>',
@@ -552,20 +562,42 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       'code-snippet': codeSnippetHtml(),
     };
 
-    insertHtmlAtCaret(ed, htmlById[id], () => setIsEmpty(false));
-  }, [insertVersion]);
+    insertHtmlAtCaret(ed, htmlById[id], () => {
+      setIsEmpty(false);
+      notifyChange();
+    });
+  }, [insertVersion, onImportModalOpenChange, notifyChange]);
+
+  const handleImport = useCallback(
+    async (payload: { file?: File; url?: string }) => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      await applyImportToEditor(ed, payload);
+      setShowSlashMenu(false);
+      setCombinedMenuView('root');
+      const hasChips = ed.querySelectorAll('.variable-chip').length > 0;
+      setIsEmpty(ed.innerText.trim() === '' && !hasChips);
+      refreshUsedVariables();
+      notifyChange();
+    },
+    [refreshUsedVariables, notifyChange]
+  );
 
   const handleLinkInsert = useCallback((url: string, label: string) => {
     const ed = editorRef.current;
     if (!ed) return;
-    insertHtmlAtCaret(ed, linkHtml(url, label), () => setIsEmpty(false));
-  }, []);
+    insertHtmlAtCaret(ed, linkHtml(url, label), () => {
+      setIsEmpty(false);
+      notifyChange();
+    });
+  }, [notifyChange]);
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const hasChips = el.querySelectorAll('.variable-chip').length > 0;
     setIsEmpty(el.innerText.trim() === '' && !hasChips);
     refreshUsedVariables();
+    notifyChange();
 
     const detachedBo = breakoutTextRef.current;
     if (detachedBo && !detachedBo.parentNode) {
@@ -615,6 +647,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
         insertClonedChipsAtCaret(ed, parsed, () => {
           setIsEmpty(false);
           refreshUsedVariables();
+          notifyChange();
         });
       }
     }
@@ -638,6 +671,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       const hasChips = ed.querySelectorAll('.variable-chip').length > 0;
       setIsEmpty(ed.innerText.trim() === '' && !hasChips);
       refreshUsedVariables();
+      notifyChange();
     }
     return true;
   };
@@ -681,12 +715,13 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           const hasChips = el.querySelectorAll('.variable-chip').length > 0;
           setIsEmpty(el.innerText.trim() === "" && !hasChips);
           refreshUsedVariables();
+          notifyChange();
         }
       }
     }
 
     const chip = target.closest('.variable-chip') as HTMLElement | null;
-    if (chip && chip.getAttribute('data-needs-recipient') === 'true') {
+    if (chip && chip.getAttribute('data-needs-recipient') === 'true' && usesRecipientChipPicker(insertVersion)) {
       openRecipientPickerForChip(chip);
       return;
     }
@@ -1008,9 +1043,12 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
         if (slashActiveIndex === 0) {
           e.preventDefault();
           drillIntoCombinedVariables();
+        } else if (slashActiveIndex === 1) {
+          e.preventDefault();
+          handleSlashSelect('import');
         } else {
           e.preventDefault();
-          const block = SLASH_BLOCK_ROWS[slashActiveIndex - 1];
+          const block = SLASH_BLOCK_ROWS[slashActiveIndex - 2];
           if (block) handleSlashSelect(block.id);
         }
         return;
@@ -1255,97 +1293,22 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           />
         )}
 
-        {recipientPicker.isOpen && (insertVersion === 'ideal' || insertVersion === 'v3_5') && (
-          <div
-            className="fixed z-[1200] w-[340px] rounded-xl border border-gray-200 bg-white shadow-[0_18px_45px_rgba(0,0,0,0.16)] overflow-hidden"
-            style={{ top: `${recipientPicker.top}px`, left: `${recipientPicker.left}px` }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="relative border-b border-gray-100">
-              <input
-                ref={recipientInputRef}
-                type="text"
-                role="combobox"
-                aria-expanded={recipientMatches.length > 0}
-                aria-controls="recipient-picker-listbox"
-                aria-activedescendant={
-                  recipientMatches.length > 0
-                    ? `recipient-option-${recipientMatches[recipientHl]?.id ?? ''}`
-                    : undefined
-                }
-                value={recipientSearchQuery}
-                onChange={(e) => setRecipientSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    closeRecipientPicker();
-                    return;
-                  }
-                  const len = recipientMatches.length;
-                  if (len === 0) return;
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setRecipientHighlightIndex((i) => (i + 1) % len);
-                    return;
-                  }
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setRecipientHighlightIndex((i) => (i - 1 + len) % len);
-                    return;
-                  }
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const pick = recipientMatches[recipientHl];
-                    if (pick) resolveChipRecipient(pick);
-                  }
-                }}
-                className="w-full py-3 pl-10 pr-3 text-[15px] text-gray-700 outline-none"
-                placeholder="Search people"
-                autoComplete="off"
-              />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">⌕</span>
-            </div>
-            <div
-              id="recipient-picker-listbox"
-              ref={recipientScrollRef}
-              role="listbox"
-              aria-label="People"
-              className="max-h-72 overflow-y-auto py-2"
-            >
-              {recipientMatches.map((employee, index) => (
-                <button
-                  key={employee.id}
-                  id={`recipient-option-${employee.id}`}
-                  role="option"
-                  type="button"
-                  data-recipient-highlight-index={index}
-                  aria-selected={index === recipientHl}
-                  className={`w-full px-4 py-2 text-left text-[14px] text-gray-700 flex items-center gap-3 ${
-                    index === recipientHl ? 'bg-[#7A005D]/8' : 'hover:bg-gray-50'
-                  }`}
-                  onMouseEnter={() => setRecipientHighlightIndex(index)}
-                  onClick={() => resolveChipRecipient(employee)}
-                >
-                  <img
-                    src={employee.avatarUrl}
-                    alt=""
-                    width={32}
-                    height={32}
-                    loading="lazy"
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    className="h-8 w-8 rounded-full object-cover shrink-0 ring-1 ring-gray-200 bg-gray-100"
-                  />
-                  <span className="truncate">{employee.name}</span>
-                </button>
-              ))}
-              {recipientMatches.length === 0 && (
-                <div className="px-4 py-5 text-[13px] text-gray-400">No results found</div>
-              )}
-            </div>
-          </div>
+        {recipientPicker.isOpen && usesRecipientChipPicker(insertVersion) && (
+          <RecipientAssignPopover
+            top={recipientPicker.top}
+            left={recipientPicker.left}
+            employees={EMPLOYEE_DIRECTORY}
+            selectedRecipientId={selectedRecipientId}
+            onSelect={resolveChipRecipient}
+            onClose={closeRecipientPicker}
+          />
         )}
+
+        <ImportModal
+          isOpen={importModalOpen}
+          onClose={() => onImportModalOpenChange?.(false)}
+          onImport={handleImport}
+        />
 
         {/* Floating AI Helper */}
         <div className="absolute top-12 right-12">
