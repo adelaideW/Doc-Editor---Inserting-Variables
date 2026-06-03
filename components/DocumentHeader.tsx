@@ -1,11 +1,13 @@
 
 import React from 'react';
 import { Users, Variable, Eye, FileUp } from 'lucide-react';
+import type { InsertVersion } from './insertVersions';
 
 interface Props {
   title: string;
   setTitle: (t: string) => void;
   onInsertVariable: () => void;
+  insertVersion: InsertVersion;
 }
 
 const DocumentHeader: React.FC<Props> = ({ title, setTitle, onInsertVariable }) => {

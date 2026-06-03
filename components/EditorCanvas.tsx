@@ -3,9 +3,18 @@ import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from
 import { Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { gemini } from '../services/gemini';
 import VariableDropdown, { VariableItem, VariableDropdownHandle } from './VariableDropdown';
+import type { InsertVersion } from './insertVersions';
+import {
+  applyChipVisualState,
+  insertVariableAtCaret,
+} from './insertVariable/insertVariableAtCaret';
+import ObjectGraphSidePanel from './insertVariable/ObjectGraphSidePanel';
+import AddVariablesModal from './insertVariable/AddVariablesModal';
+import SlashBlockMenu, { type SlashMenuItemId } from './insertVariable/SlashBlockMenu';
 
 interface Props {
   insertTrigger?: number;
+  insertVersion: InsertVersion;
 }
 
 type EmployeeRecord = { id: string; name: string; avatarUrl: string };
@@ -30,10 +39,16 @@ const EMPLOYEE_DIRECTORY: EmployeeRecord[] = Array.from({ length: 40 }, (_, i) =
   };
 });
 
-const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
+const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiInput, setShowAiInput] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
+
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashMenuPos, setSlashMenuPos] = useState({ top: 0, left: 0 });
+  const [slashActiveIndex, setSlashActiveIndex] = useState(0);
   
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
@@ -95,11 +110,21 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     setRecipientHighlightIndex(0);
   }, []);
 
-  const applyChipVisualState = useCallback((chip: HTMLElement, warning: boolean) => {
-    chip.className = warning
-      ? "variable-chip inline-flex items-center px-2 py-0.5 mx-0.5 rounded bg-amber-50 border border-amber-300 text-[14px] text-amber-900 font-medium select-none align-baseline leading-tight transition-all duration-200 cursor-pointer group"
-      : "variable-chip inline-flex items-center px-2 py-0.5 mx-0.5 rounded bg-[#7A005D]/5 border border-[#7A005D]/20 text-[14px] text-[#7A005D] font-medium select-none align-baseline leading-tight transition-all duration-200 cursor-default group";
-  }, []);
+  const closeAllInsertOverlays = useCallback(() => {
+    setShowDropdown(false);
+    setSearchQuery('');
+    setActiveIndex(0);
+    breakoutTextRef.current = null;
+    setSidePanelOpen(false);
+    setAddModalOpen(false);
+    setShowSlashMenu(false);
+    setSlashActiveIndex(0);
+    closeRecipientPicker();
+  }, [closeRecipientPicker]);
+
+  useEffect(() => {
+    closeAllInsertOverlays();
+  }, [insertVersion, closeAllInsertOverlays]);
 
   const openRecipientPickerForChip = useCallback((chip: HTMLElement) => {
     const rect = chip.getBoundingClientRect();
@@ -125,10 +150,10 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     closeRecipientPicker();
   }, [applyChipVisualState, closeRecipientPicker]);
 
-  const updateDropdownPosition = useCallback(() => {
+  const computeCaretAnchor = useCallback(() => {
     const sel = window.getSelection();
     const ed = editorRef.current;
-    if (!sel?.rangeCount || !ed) return;
+    if (!sel?.rangeCount || !ed) return { top: 0, left: 8 };
 
     const live = sel.getRangeAt(0).cloneRange();
     live.collapse(true);
@@ -155,7 +180,6 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       }
     }
 
-    /** Empty `contenteditable` often reports a caret rect as tall as `min-height` — anchor to first visual line instead of rect.bottom */
     const LINE_ESTIMATE = 22;
     const CARET_GAP = 12;
     const DROPDOWN_MAX_W = 620;
@@ -177,11 +201,13 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     const pad = 8;
     leftPx = Math.max(pad, Math.min(leftPx, window.innerWidth - DROPDOWN_MAX_W - pad));
 
-    setDropdownPos({
-      top: topPx,
-      left: leftPx,
-    });
+    return { top: topPx, left: leftPx };
   }, []);
+
+  const updateDropdownPosition = useCallback(() => {
+    const anchor = computeCaretAnchor();
+    setDropdownPos(anchor);
+  }, [computeCaretAnchor]);
 
   /** Replace chip with visible label text + search mode; caret at end — further Backspace removes characters until empty removes variable. */
   const replaceChipWithBreakoutText = useCallback((chip: HTMLElement) => {
@@ -215,17 +241,30 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     return true;
   }, [updateDropdownPosition]);
 
-  // Trigger from DocumentHeader button — `{` is not written to the canvas; caret anchors the dropdown.
+  // Trigger from DocumentHeader button — behavior depends on insertion version.
   useLayoutEffect(() => {
-    if (insertTrigger && insertTrigger > 0 && editorRef.current) {
+    if (!insertTrigger || insertTrigger <= 0 || !editorRef.current) return;
+
+    editorRef.current.focus();
+
+    if (insertVersion === 'ideal') {
       breakoutTextRef.current = null;
-      editorRef.current.focus();
       setShowDropdown(true);
       setSearchQuery('');
       setActiveIndex(0);
       requestAnimationFrame(() => updateDropdownPosition());
+      return;
     }
-  }, [insertTrigger, updateDropdownPosition]);
+
+    if (insertVersion === 'v1') {
+      setSidePanelOpen((open) => !open);
+      return;
+    }
+
+    if (insertVersion === 'v2' || insertVersion === 'v3') {
+      setAddModalOpen(true);
+    }
+  }, [insertTrigger, insertVersion, updateDropdownPosition]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -246,81 +285,52 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
     };
   }, [showDropdown, updateDropdownPosition]);
 
-  const createChip = (item: VariableItem) => {
-    const label = item.insertLabel ?? item.label;
-    const chip = document.createElement('span');
-    const warning = item.needsRecipient === true;
-    applyChipVisualState(chip, warning);
-    chip.contentEditable = "false";
-    chip.setAttribute('data-variable', label);
-    chip.setAttribute('data-variable-path', item.path);
-    chip.setAttribute('data-needs-recipient', warning ? 'true' : 'false');
-    chip.title = item.path;
-    
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'pointer-events-none';
-    labelSpan.textContent = label;
-    chip.appendChild(labelSpan);
-    const rule = document.createElement('div');
-    rule.className = 'mx-1.5 w-[1px] h-3 bg-[#7A005D]/20 pointer-events-none';
-    chip.appendChild(rule);
-    const delBtn = document.createElement('button');
-    delBtn.className =
-      'chip-delete-btn p-0.5 rounded hover:bg-[#7A005D]/10 transition-colors flex items-center justify-center cursor-pointer';
-    delBtn.type = 'button';
-    delBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="opacity-60 pointer-events-none"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
-    chip.appendChild(delBtn);
-    return chip;
-  };
+  const afterChipInserted = useCallback(() => {
+    setIsEmpty(false);
+    setShowDropdown(false);
+    setSearchQuery('');
+    setActiveIndex(0);
+    breakoutTextRef.current = null;
+  }, []);
 
   const handleVariableSelect = useCallback((item: VariableItem) => {
-    if (!editorRef.current) return;
+    const ed = editorRef.current;
+    if (!ed) return;
 
-    editorRef.current.focus();
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
+    insertVariableAtCaret({
+      editorEl: ed,
+      item,
+      breakoutText: breakoutTextRef.current,
+      onInserted: afterChipInserted,
+    });
+  }, [afterChipInserted]);
 
-    const range = sel.getRangeAt(0).cloneRange();
-    range.collapse(true);
+  const handleSharedInsert = useCallback(
+    (item: VariableItem) => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      ed.focus();
+      insertVariableAtCaret({
+        editorEl: ed,
+        item,
+        onInserted: () => setIsEmpty(false),
+      });
+    },
+    []
+  );
 
-    const chip = createChip(item);
+  const openSlashMenuAtCaret = useCallback(() => {
+    setSlashMenuPos(computeCaretAnchor());
+    setShowSlashMenu(true);
+    setSlashActiveIndex(0);
+  }, [computeCaretAnchor]);
 
-    const bo = breakoutTextRef.current;
-    if (bo && bo.parentNode) {
-      bo.parentNode.replaceChild(chip, bo);
-      breakoutTextRef.current = null;
-      sel.removeAllRanges();
-      const r = document.createRange();
-      const space = document.createTextNode('\u00A0');
-      r.setStartAfter(chip);
-      r.insertNode(space);
-      r.setStartAfter(space);
-      r.collapse(true);
-      sel.addRange(r);
-      setShowDropdown(false);
-      setSearchQuery('');
-      setIsEmpty(false);
-      setActiveIndex(0);
-      return;
+  const handleSlashSelect = useCallback((id: SlashMenuItemId) => {
+    setShowSlashMenu(false);
+    if (id === 'insert-variables') {
+      setAddModalOpen(true);
     }
-
-    range.insertNode(chip);
-    range.setStartAfter(chip);
-    range.setEndAfter(chip);
-    
-    const space = document.createTextNode('\u00A0'); 
-    range.insertNode(space);
-    range.setStartAfter(space);
-    range.setEndAfter(space);
-    
-    sel.removeAllRanges();
-    sel.addRange(range);
-
-    setShowDropdown(false);
-    setSearchQuery("");
-    setIsEmpty(false);
-    setActiveIndex(0);
-  }, [applyChipVisualState]);
+  }, []);
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -393,6 +403,9 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       breakoutTextRef.current = null;
       setShowDropdown(false);
       setSearchQuery('');
+    }
+    if (showSlashMenu) {
+      setShowSlashMenu(false);
     }
   };
 
@@ -488,13 +501,43 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
       return;
     }
 
-    if (!showDropdown && e.key === '{') {
+    if (showSlashMenu && insertVersion === 'v3') {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashActiveIndex((prev) => (prev + 1) % 8);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashActiveIndex((prev) => (prev - 1 + 8) % 8);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (slashActiveIndex === 0) handleSlashSelect('insert-variables');
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        return;
+      }
+      return;
+    }
+
+    if (insertVersion === 'ideal' && !showDropdown && e.key === '{') {
       breakoutTextRef.current = null;
       e.preventDefault();
       setShowDropdown(true);
       setSearchQuery('');
       setActiveIndex(0);
       requestAnimationFrame(() => updateDropdownPosition());
+      return;
+    }
+
+    if (insertVersion === 'v3' && !showSlashMenu && !addModalOpen && e.key === '/') {
+      e.preventDefault();
+      openSlashMenuAtCaret();
       return;
     }
 
@@ -594,7 +637,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
           </div>
         )}
 
-        {showDropdown && (
+        {insertVersion === 'ideal' && showDropdown && (
           <VariableDropdown
             ref={variableDropdownRef}
             onSelect={handleVariableSelect}
@@ -611,7 +654,33 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger }) => {
           />
         )}
 
-        {recipientPicker.isOpen && (
+        {insertVersion === 'v1' && (
+          <ObjectGraphSidePanel
+            isOpen={sidePanelOpen}
+            onClose={() => setSidePanelOpen(false)}
+            onInsert={handleSharedInsert}
+          />
+        )}
+
+        {(insertVersion === 'v2' || insertVersion === 'v3') && (
+          <AddVariablesModal
+            isOpen={addModalOpen}
+            onClose={() => setAddModalOpen(false)}
+            onInsert={handleSharedInsert}
+          />
+        )}
+
+        {insertVersion === 'v3' && showSlashMenu && (
+          <SlashBlockMenu
+            top={slashMenuPos.top}
+            left={slashMenuPos.left}
+            activeIndex={slashActiveIndex}
+            onSelect={handleSlashSelect}
+            onHover={setSlashActiveIndex}
+          />
+        )}
+
+        {recipientPicker.isOpen && insertVersion === 'ideal' && (
           <div
             className="fixed z-[1200] w-[340px] rounded-xl border border-gray-200 bg-white shadow-[0_18px_45px_rgba(0,0,0,0.16)] overflow-hidden"
             style={{ top: `${recipientPicker.top}px`, left: `${recipientPicker.left}px` }}
