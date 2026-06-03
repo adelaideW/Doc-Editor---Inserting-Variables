@@ -39,6 +39,7 @@ import {
 import InsertLinkModal from './insertVariable/InsertLinkModal';
 import ImportModal from './insertVariable/ImportModal';
 import { applyImportToEditor, augmentItemForInsert } from './insertVariable/importContent';
+import { syncCanvasPageHeight } from './insertVariable/canvasLayout';
 import { clearEditorContents, isFullEditorSelection } from './insertVariable/editorSelectionUtils';
 import LuminaAiPopover from './insertVariable/LuminaAiPopover';
 import { offerLetterDemoHtml } from './insertVariable/offerLetterDemoHtml';
@@ -118,6 +119,7 @@ const EditorCanvas: React.FC<Props> = ({
   const [selectedRecipientId, setSelectedRecipientId] = useState<string | null>(null);
   
   const editorRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const variableDropdownRef = useRef<VariableDropdownHandle>(null);
   const recipientChipRef = useRef<HTMLElement | null>(null);
   const showDropdownRef = useRef(false);
@@ -139,9 +141,27 @@ const EditorCanvas: React.FC<Props> = ({
     setUsedVariableIds(collectUsedVariableIds(editorRef.current));
   }, []);
 
+  const syncCanvasLayout = useCallback(() => {
+    const ed = editorRef.current;
+    const page = pageRef.current;
+    if (!ed || !page) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (editorRef.current && pageRef.current) {
+          syncCanvasPageHeight(pageRef.current, editorRef.current);
+        }
+      });
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    syncCanvasLayout();
+  }, [syncCanvasLayout, isEmpty]);
+
   const notifyChange = useCallback(() => {
+    syncCanvasLayout();
     onDocumentChange?.();
-  }, [onDocumentChange]);
+  }, [onDocumentChange, syncCanvasLayout]);
 
   const closeRecipientPicker = useCallback(() => {
     recipientChipRef.current = null;
@@ -1261,7 +1281,10 @@ const EditorCanvas: React.FC<Props> = ({
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-[#F8F9FA] p-12 flex justify-center relative scroll-smooth">
-        <div className="w-[850px] min-h-[1100px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] border border-gray-200 p-[96px] relative mb-12">
+        <div
+          ref={pageRef}
+          className="w-[850px] min-h-[1100px] h-auto bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] border border-gray-200 p-[96px] relative mb-12 overflow-visible"
+        >
         <div
           ref={editorRef}
           contentEditable
@@ -1273,7 +1296,7 @@ const EditorCanvas: React.FC<Props> = ({
           onMouseMove={handleEditorMouseMove}
           onMouseLeave={handleEditorMouseLeave}
           onKeyDown={handleKeyDown}
-          className="w-full h-full min-h-[800px] outline-none border-none text-[16px] leading-[1.6] text-[#1A1A1A] font-normal whitespace-pre-wrap selection:bg-[#7A005D]/40 selection:text-[#7A005D]"
+          className="w-full min-h-[800px] outline-none border-none text-[16px] leading-[1.6] text-[#1A1A1A] font-normal whitespace-pre-wrap selection:bg-[#7A005D]/40 selection:text-[#7A005D]"
           style={{ cursor: 'text' }}
           spellCheck={false}
         />
