@@ -3,14 +3,44 @@ import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from
 import { Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { gemini } from '../services/gemini';
 import VariableDropdown, { VariableItem, VariableDropdownHandle } from './VariableDropdown';
-import type { InsertVersion } from './insertVersions';
+import {
+  usesAddVariablesModal,
+  usesCombinedInsertMenu,
+  usesSidePanel,
+  type InsertVersion,
+} from './insertVersions';
 import {
   applyChipVisualState,
+  getChipsInSelection,
+  insertClonedChipsAtCaret,
+  insertHtmlAtCaret,
+  insertBulletedListAtCaret,
+  insertNumberedListAtCaret,
   insertVariableAtCaret,
+  parseChipsFromHtml,
 } from './insertVariable/insertVariableAtCaret';
+import { getVariableDescription } from './insertVariable/variableDescriptions';
 import ObjectGraphSidePanel from './insertVariable/ObjectGraphSidePanel';
+import ObjectGraphCollapsedRail from './insertVariable/ObjectGraphCollapsedRail';
 import AddVariablesModal from './insertVariable/AddVariablesModal';
-import SlashBlockMenu, { type SlashMenuItemId } from './insertVariable/SlashBlockMenu';
+import SlashBlockMenu, {
+  SLASH_BLOCK_ROWS,
+  SLASH_MENU_ROWS,
+  type SlashMenuItemId,
+} from './insertVariable/SlashBlockMenu';
+import CombinedInsertMenu, { type CombinedMenuView } from './insertVariable/CombinedInsertMenu';
+import {
+  COMBINED_ROOT_ROW_COUNT,
+  searchCombinedMenu,
+} from './insertVariable/combinedMenuSearch';
+import InsertLinkModal from './insertVariable/InsertLinkModal';
+import {
+  codeSnippetHtml,
+  linkHtml,
+  quoteBlockHtml,
+} from './insertVariable/slashMenuContent';
+import VariableChipRouteTooltip from './insertVariable/VariableChipRouteTooltip';
+import { collectUsedVariableIds } from './insertVariable/collectUsedVariableIds';
 
 interface Props {
   insertTrigger?: number;
@@ -46,9 +76,12 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
 
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashMenuPos, setSlashMenuPos] = useState({ top: 0, left: 0 });
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
+  const [combinedMenuView, setCombinedMenuView] = useState<CombinedMenuView>('root');
+  const [searchActiveIndex, setSearchActiveIndex] = useState(0);
   
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
@@ -73,8 +106,19 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
   const breakoutTextRef = useRef<Text | null>(null);
   /** True after Cmd/Ctrl+A while dropdown is open — next Delete/Backspace clears the whole query. */
   const searchSelectAllRef = useRef(false);
+  /** Backspaces pressed while search query is already empty; dismiss after 2. */
+  const emptyBackspaceCountRef = useRef(0);
   const [isEmpty, setIsEmpty] = useState(true);
+  const [usedVariableIds, setUsedVariableIds] = useState<Set<string>>(() => new Set());
+  const [chipRouteTooltip, setChipRouteTooltip] = useState<{
+    description: string;
+    rect: DOMRect;
+  } | null>(null);
   showDropdownRef.current = showDropdown;
+
+  const refreshUsedVariables = useCallback(() => {
+    setUsedVariableIds(collectUsedVariableIds(editorRef.current));
+  }, []);
 
   const recipientMatches = React.useMemo(() => {
     const query = recipientSearchQuery.trim().toLowerCase();
@@ -117,14 +161,37 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     breakoutTextRef.current = null;
     setSidePanelOpen(false);
     setAddModalOpen(false);
+    setLinkModalOpen(false);
     setShowSlashMenu(false);
     setSlashActiveIndex(0);
+    setCombinedMenuView('root');
+    setSearchActiveIndex(0);
+    searchSelectAllRef.current = false;
+    emptyBackspaceCountRef.current = 0;
     closeRecipientPicker();
   }, [closeRecipientPicker]);
+
+  const dismissVariablePicker = useCallback(() => {
+    setShowDropdown(false);
+    setShowSlashMenu(false);
+    setCombinedMenuView('root');
+    setSearchQuery('');
+    setActiveIndex(0);
+    setSearchActiveIndex(0);
+    breakoutTextRef.current = null;
+    searchSelectAllRef.current = false;
+    emptyBackspaceCountRef.current = 0;
+  }, []);
 
   useEffect(() => {
     closeAllInsertOverlays();
   }, [insertVersion, closeAllInsertOverlays]);
+
+  useEffect(() => {
+    if (insertVersion === 'v1_5') {
+      setSidePanelOpen(true);
+    }
+  }, [insertVersion]);
 
   const openRecipientPickerForChip = useCallback((chip: HTMLElement) => {
     const rect = chip.getBoundingClientRect();
@@ -209,6 +276,15 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     setDropdownPos(anchor);
   }, [computeCaretAnchor]);
 
+  const updateInsertMenuPosition = useCallback(() => {
+    const anchor = computeCaretAnchor();
+    if (usesCombinedInsertMenu(insertVersion)) {
+      setSlashMenuPos(anchor);
+    } else {
+      setDropdownPos(anchor);
+    }
+  }, [computeCaretAnchor, insertVersion]);
+
   /** Replace chip with visible label text + search mode; caret at end — further Backspace removes characters until empty removes variable. */
   const replaceChipWithBreakoutText = useCallback((chip: HTMLElement) => {
     const ed = editorRef.current;
@@ -222,8 +298,15 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
 
     breakoutTextRef.current = textNode;
     setSearchQuery(label);
-    setShowDropdown(true);
     setActiveIndex(0);
+    emptyBackspaceCountRef.current = 0;
+    if (usesCombinedInsertMenu(insertVersion)) {
+      setSlashMenuPos(computeCaretAnchor());
+      setShowSlashMenu(true);
+      setCombinedMenuView('variablesDrillIn');
+    } else {
+      setShowDropdown(true);
+    }
 
     const sel = window.getSelection();
     if (sel) {
@@ -235,11 +318,11 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     }
 
     requestAnimationFrame(() => {
-      updateDropdownPosition();
+      updateInsertMenuPosition();
       ed.dispatchEvent(new Event('input', { bubbles: true }));
     });
     return true;
-  }, [updateDropdownPosition]);
+  }, [updateInsertMenuPosition, insertVersion, computeCaretAnchor]);
 
   // Trigger from DocumentHeader button — behavior depends on insertion version.
   useLayoutEffect(() => {
@@ -249,10 +332,24 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
 
     if (insertVersion === 'ideal') {
       breakoutTextRef.current = null;
+      emptyBackspaceCountRef.current = 0;
       setShowDropdown(true);
       setSearchQuery('');
       setActiveIndex(0);
       requestAnimationFrame(() => updateDropdownPosition());
+      return;
+    }
+
+    if (insertVersion === 'v3_5') {
+      breakoutTextRef.current = null;
+      emptyBackspaceCountRef.current = 0;
+      setSlashMenuPos(computeCaretAnchor());
+      setShowSlashMenu(true);
+      setCombinedMenuView('root');
+      setSearchQuery('');
+      setActiveIndex(0);
+      setSlashActiveIndex(0);
+      setSearchActiveIndex(0);
       return;
     }
 
@@ -261,37 +358,56 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       return;
     }
 
-    if (insertVersion === 'v2' || insertVersion === 'v3') {
+    if (insertVersion === 'v1_5') {
+      setSidePanelOpen(true);
+      return;
+    }
+
+    if (usesAddVariablesModal(insertVersion)) {
       setAddModalOpen(true);
     }
-  }, [insertTrigger, insertVersion, updateDropdownPosition]);
+  }, [insertTrigger, insertVersion, updateDropdownPosition, computeCaretAnchor]);
+
+  const combinedSearchResults = React.useMemo(
+    () => searchCombinedMenu(searchQuery),
+    [searchQuery]
+  );
+
+  useEffect(() => {
+    setSearchActiveIndex(0);
+  }, [searchQuery]);
 
   useEffect(() => {
     setActiveIndex(0);
   }, [searchQuery]);
 
-  // Keep the menu aligned with the typed `{` while scrolling or resizing
+  // Keep the menu aligned with the caret while scrolling or resizing
   useEffect(() => {
-    if (!showDropdown) return;
-    const ro = new ResizeObserver(() => updateDropdownPosition());
+    const combinedOpen = showSlashMenu && usesCombinedInsertMenu(insertVersion);
+    if (!showDropdown && !combinedOpen) return;
+    const ro = new ResizeObserver(() => updateInsertMenuPosition());
     const root = editorRef.current?.closest('.overflow-y-auto') ?? document.documentElement;
     ro.observe(root);
-    window.addEventListener('scroll', updateDropdownPosition, true);
-    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateInsertMenuPosition, true);
+    window.addEventListener('resize', updateInsertMenuPosition);
     return () => {
       ro.disconnect();
-      window.removeEventListener('scroll', updateDropdownPosition, true);
-      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateInsertMenuPosition, true);
+      window.removeEventListener('resize', updateInsertMenuPosition);
     };
-  }, [showDropdown, updateDropdownPosition]);
+  }, [showDropdown, showSlashMenu, insertVersion, updateInsertMenuPosition]);
 
   const afterChipInserted = useCallback(() => {
     setIsEmpty(false);
     setShowDropdown(false);
+    setShowSlashMenu(false);
+    setCombinedMenuView('root');
     setSearchQuery('');
     setActiveIndex(0);
+    setSearchActiveIndex(0);
     breakoutTextRef.current = null;
-  }, []);
+    refreshUsedVariables();
+  }, [refreshUsedVariables]);
 
   const handleVariableSelect = useCallback((item: VariableItem) => {
     const ed = editorRef.current;
@@ -313,34 +429,127 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       insertVariableAtCaret({
         editorEl: ed,
         item,
-        onInserted: () => setIsEmpty(false),
+        onInserted: () => {
+          setIsEmpty(false);
+          refreshUsedVariables();
+        },
       });
     },
-    []
+    [refreshUsedVariables]
   );
 
+  const removeSlashBeforeCaret = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const sc = range.startContainer;
+    if (sc.nodeType === Node.TEXT_NODE) {
+      const t = sc as Text;
+      const offset = range.startOffset;
+      if (offset > 0 && t.data.charAt(offset - 1) === '/') {
+        t.deleteData(offset - 1, 1);
+        const r = document.createRange();
+        r.setStart(t, offset - 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+    }
+  }, []);
+
   const openSlashMenuAtCaret = useCallback(() => {
+    removeSlashBeforeCaret();
     setSlashMenuPos(computeCaretAnchor());
     setShowSlashMenu(true);
     setSlashActiveIndex(0);
-  }, [computeCaretAnchor]);
+  }, [computeCaretAnchor, removeSlashBeforeCaret]);
+
+  const openCombinedMenuAtCaret = useCallback(() => {
+    removeSlashBeforeCaret();
+    setSlashMenuPos(computeCaretAnchor());
+    setShowSlashMenu(true);
+    setCombinedMenuView('root');
+    setSearchQuery('');
+    setActiveIndex(0);
+    setSlashActiveIndex(0);
+    setSearchActiveIndex(0);
+    emptyBackspaceCountRef.current = 0;
+  }, [computeCaretAnchor, removeSlashBeforeCaret]);
+
+  const openVariableDropdownAtCaret = useCallback(() => {
+    removeSlashBeforeCaret();
+    breakoutTextRef.current = null;
+    emptyBackspaceCountRef.current = 0;
+    setShowDropdown(true);
+    setSearchQuery('');
+    setActiveIndex(0);
+    requestAnimationFrame(() => updateDropdownPosition());
+  }, [removeSlashBeforeCaret, updateDropdownPosition]);
+
+  const drillIntoCombinedVariables = useCallback(() => {
+    setCombinedMenuView('variablesDrillIn');
+    setActiveIndex(0);
+  }, []);
 
   const handleSlashSelect = useCallback((id: SlashMenuItemId) => {
     setShowSlashMenu(false);
+    setCombinedMenuView('root');
+    const ed = editorRef.current;
+    if (!ed) return;
+
     if (id === 'insert-variables') {
-      setAddModalOpen(true);
+      if (!usesCombinedInsertMenu(insertVersion)) {
+        setAddModalOpen(true);
+      }
+      return;
     }
+
+    if (id === 'link') {
+      setLinkModalOpen(true);
+      return;
+    }
+
+    if (id === 'bulleted-list') {
+      insertBulletedListAtCaret(ed, () => setIsEmpty(false));
+      return;
+    }
+
+    if (id === 'numbered-list') {
+      insertNumberedListAtCaret(ed, () => setIsEmpty(false));
+      return;
+    }
+
+    const htmlById: Record<
+      Exclude<SlashMenuItemId, 'insert-variables' | 'link' | 'bulleted-list' | 'numbered-list'>,
+      string
+    > = {
+      divider: '<hr><p><br></p>',
+      quote: quoteBlockHtml(),
+      'normal-text': '<p>Text</p>&nbsp;',
+      'code-snippet': codeSnippetHtml(),
+    };
+
+    insertHtmlAtCaret(ed, htmlById[id], () => setIsEmpty(false));
+  }, [insertVersion]);
+
+  const handleLinkInsert = useCallback((url: string, label: string) => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    insertHtmlAtCaret(ed, linkHtml(url, label), () => setIsEmpty(false));
   }, []);
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const hasChips = el.querySelectorAll('.variable-chip').length > 0;
     setIsEmpty(el.innerText.trim() === '' && !hasChips);
+    refreshUsedVariables();
 
     const detachedBo = breakoutTextRef.current;
     if (detachedBo && !detachedBo.parentNode) {
       breakoutTextRef.current = null;
       setShowDropdown(false);
+      setShowSlashMenu(false);
+      setCombinedMenuView('root');
       setSearchQuery('');
     }
 
@@ -349,29 +558,91 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       const data = activeBo.data;
       setSearchQuery(data);
       if (data === '') {
-        activeBo.remove();
-        breakoutTextRef.current = null;
-        setShowDropdown(false);
         setSearchQuery('');
-        const hasAnyChips = el.querySelectorAll('.variable-chip').length > 0;
-        setIsEmpty(el.innerText.trim() === '' && !hasAnyChips);
+        emptyBackspaceCountRef.current = 0;
+      } else {
+        emptyBackspaceCountRef.current = 0;
       }
     }
 
-    if (showDropdownRef.current) {
-      requestAnimationFrame(() => updateDropdownPosition());
+    if (showDropdownRef.current || (showSlashMenu && usesCombinedInsertMenu(insertVersion))) {
+      requestAnimationFrame(() => updateInsertMenuPosition());
     }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    if (!showDropdownRef.current) return;
-    if (breakoutTextRef.current?.parentNode) return;
+    if (showDropdownRef.current) {
+      if (breakoutTextRef.current?.parentNode) return;
 
-    const plain = e.clipboardData?.getData('text/plain');
-    if (!plain) return;
+      const plain = e.clipboardData?.getData('text/plain');
+      if (!plain) return;
+      e.preventDefault();
+      setSearchQuery((s) => s + plain.replace(/\s+/g, ' '));
+      requestAnimationFrame(() => updateDropdownPosition());
+      return;
+    }
+
+    const html = e.clipboardData?.getData('text/html');
+    if (html?.includes('variable-chip')) {
+      const parsed = parseChipsFromHtml(html);
+      if (parsed.length > 0) {
+        e.preventDefault();
+        const ed = editorRef.current;
+        if (!ed) return;
+        insertClonedChipsAtCaret(ed, parsed, () => {
+          setIsEmpty(false);
+          refreshUsedVariables();
+        });
+      }
+    }
+  };
+
+  const writeChipsToClipboard = (e: React.ClipboardEvent, removeAfter: boolean) => {
+    const ed = editorRef.current;
+    if (!ed) return false;
+
+    const chips = getChipsInSelection(ed);
+    if (chips.length === 0) return false;
+
     e.preventDefault();
-    setSearchQuery((s) => s + plain.replace(/\s+/g, ' '));
-    requestAnimationFrame(() => updateDropdownPosition());
+    const html = chips.map((chip) => chip.outerHTML).join(' ');
+    const plain = chips.map((chip) => chip.getAttribute('data-variable') ?? '').join(' ');
+    e.clipboardData.setData('text/html', html);
+    e.clipboardData.setData('text/plain', plain);
+
+    if (removeAfter) {
+      chips.forEach((chip) => chip.remove());
+      const hasChips = ed.querySelectorAll('.variable-chip').length > 0;
+      setIsEmpty(ed.innerText.trim() === '' && !hasChips);
+      refreshUsedVariables();
+    }
+    return true;
+  };
+
+  const handleCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    writeChipsToClipboard(e, false);
+  };
+
+  const handleCut = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    writeChipsToClipboard(e, true);
+  };
+
+  const handleEditorMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const chip = (e.target as HTMLElement).closest('.variable-chip') as HTMLElement | null;
+    if (chip?.classList.contains('variable-chip')) {
+      const label = chip.getAttribute('data-variable') ?? '';
+      const stored = chip.getAttribute('data-variable-description');
+      const description = stored || getVariableDescription(label);
+      if (description) {
+        setChipRouteTooltip({ description, rect: chip.getBoundingClientRect() });
+        return;
+      }
+    }
+    setChipRouteTooltip(null);
+  };
+
+  const handleEditorMouseLeave = () => {
+    setChipRouteTooltip(null);
   };
 
   const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -386,6 +657,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
         if (el) {
           const hasChips = el.querySelectorAll('.variable-chip').length > 0;
           setIsEmpty(el.innerText.trim() === "" && !hasChips);
+          refreshUsedVariables();
         }
       }
     }
@@ -406,17 +678,53 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
     }
     if (showSlashMenu) {
       setShowSlashMenu(false);
+      setCombinedMenuView('root');
+      setSearchQuery('');
     }
   };
 
+  const handleCombinedSearchEnter = useCallback(
+    (index: number) => {
+      const row = combinedSearchResults[index];
+      if (!row) return;
+      if (row.kind === 'block') {
+        handleSlashSelect(row.id);
+      } else {
+        handleVariableSelect(row.item);
+      }
+    },
+    [combinedSearchResults, handleSlashSelect, handleVariableSelect]
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const combinedMenuOpen = showSlashMenu && usesCombinedInsertMenu(insertVersion);
+    const combinedSearchActive = combinedMenuOpen && searchQuery.trim().length > 0;
+    const combinedDrillActive =
+      combinedMenuOpen && combinedMenuView === 'variablesDrillIn' && !searchQuery.trim();
+    const combinedRootActive =
+      combinedMenuOpen && combinedMenuView === 'root' && !searchQuery.trim();
+
     if (showDropdown) {
       const mod = e.ctrlKey || e.metaKey || e.altKey;
       const inBreakout = !!breakoutTextRef.current?.parentNode;
 
       if (inBreakout) {
-        // Typing/backspace/delete apply to visible label text in the editor; picker filters via handleInput sync.
         if (e.key === 'Backspace' || e.key === 'Delete') {
+          const bo = breakoutTextRef.current;
+          if (bo?.parentNode && bo.data.length === 0 && e.key === 'Backspace') {
+            e.preventDefault();
+            emptyBackspaceCountRef.current += 1;
+            if (emptyBackspaceCountRef.current >= 2) {
+              bo.remove();
+              dismissVariablePicker();
+              const el = editorRef.current;
+              if (el) {
+                const hasAnyChips = el.querySelectorAll('.variable-chip').length > 0;
+                setIsEmpty(el.innerText.trim() === '' && !hasAnyChips);
+              }
+            }
+            return;
+          }
           return;
         }
         if (!mod && e.key.length === 1) {
@@ -434,27 +742,33 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
             searchSelectAllRef.current = false;
             e.preventDefault();
             setSearchQuery('');
-            requestAnimationFrame(() => updateDropdownPosition());
+            emptyBackspaceCountRef.current = 0;
+            requestAnimationFrame(() => updateInsertMenuPosition());
             return;
           }
           if (e.key === 'Backspace') {
             if (searchQuery.length > 0) {
               e.preventDefault();
               setSearchQuery((s) => s.slice(0, -1));
-              requestAnimationFrame(() => updateDropdownPosition());
+              emptyBackspaceCountRef.current = 0;
+              requestAnimationFrame(() => updateInsertMenuPosition());
               return;
             }
-            setShowDropdown(false);
-            setSearchQuery('');
+            e.preventDefault();
+            emptyBackspaceCountRef.current += 1;
+            if (emptyBackspaceCountRef.current >= 2) {
+              dismissVariablePicker();
+            }
             return;
           }
         }
 
         if (!mod && e.key.length === 1) {
           searchSelectAllRef.current = false;
+          emptyBackspaceCountRef.current = 0;
           e.preventDefault();
           setSearchQuery((s) => s + e.key);
-          requestAnimationFrame(() => updateDropdownPosition());
+          requestAnimationFrame(() => updateInsertMenuPosition());
           return;
         }
       }
@@ -492,29 +806,216 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         closeRecipientPicker();
-        breakoutTextRef.current = null;
-        setShowDropdown(false);
-        setSearchQuery('');
+        dismissVariablePicker();
         return;
       }
 
       return;
     }
 
-    if (showSlashMenu && insertVersion === 'v3') {
+    if (combinedSearchActive || combinedDrillActive) {
+      const mod = e.ctrlKey || e.metaKey || e.altKey;
+      const inBreakout = !!breakoutTextRef.current?.parentNode;
+
+      if (inBreakout) {
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          const bo = breakoutTextRef.current;
+          if (bo?.parentNode && bo.data.length === 0 && e.key === 'Backspace') {
+            e.preventDefault();
+            emptyBackspaceCountRef.current += 1;
+            if (emptyBackspaceCountRef.current >= 2) {
+              bo.remove();
+              dismissVariablePicker();
+              const el = editorRef.current;
+              if (el) {
+                const hasAnyChips = el.querySelectorAll('.variable-chip').length > 0;
+                setIsEmpty(el.innerText.trim() === '' && !hasAnyChips);
+              }
+            }
+            return;
+          }
+          return;
+        }
+        if (!mod && e.key.length === 1) {
+          return;
+        }
+      } else {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+          e.preventDefault();
+          searchSelectAllRef.current = true;
+          return;
+        }
+
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          if (searchSelectAllRef.current) {
+            searchSelectAllRef.current = false;
+            e.preventDefault();
+            setSearchQuery('');
+            emptyBackspaceCountRef.current = 0;
+            requestAnimationFrame(() => updateInsertMenuPosition());
+            return;
+          }
+          if (e.key === 'Backspace') {
+            if (searchQuery.length > 0) {
+              e.preventDefault();
+              setSearchQuery((s) => s.slice(0, -1));
+              emptyBackspaceCountRef.current = 0;
+              requestAnimationFrame(() => updateInsertMenuPosition());
+              return;
+            }
+            e.preventDefault();
+            emptyBackspaceCountRef.current += 1;
+            if (emptyBackspaceCountRef.current >= 2) {
+              dismissVariablePicker();
+            }
+            return;
+          }
+        }
+
+        if (!mod && e.key.length === 1) {
+          searchSelectAllRef.current = false;
+          emptyBackspaceCountRef.current = 0;
+          e.preventDefault();
+          setSearchQuery((s) => s + e.key);
+          requestAnimationFrame(() => updateInsertMenuPosition());
+          return;
+        }
+      }
+
+      if (combinedSearchActive) {
+        const len = combinedSearchResults.length;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSearchActiveIndex((prev) => (len > 0 ? (prev + 1) % len : 0));
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSearchActiveIndex((prev) => (len > 0 ? (prev - 1 + len) % len : 0));
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleCombinedSearchEnter(searchActiveIndex);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          dismissVariablePicker();
+          return;
+        }
+        return;
+      }
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSlashActiveIndex((prev) => (prev + 1) % 8);
+        setActiveIndex((prev) => (filteredItems.length > 0 ? (prev + 1) % filteredItems.length : 0));
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSlashActiveIndex((prev) => (prev - 1 + 8) % 8);
+        setActiveIndex((prev) =>
+          filteredItems.length > 0 ? (prev - 1 + filteredItems.length) % filteredItems.length : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        if (variableDropdownRef.current?.drillInto()) {
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        if (variableDropdownRef.current?.drillOut()) {
+          e.preventDefault();
+        } else {
+          e.preventDefault();
+          setCombinedMenuView('root');
+          setSlashActiveIndex(0);
+        }
+        return;
+      }
+      if (e.key === 'Enter') {
+        if (variableDropdownRef.current?.activateSelection()) {
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeRecipientPicker();
+        dismissVariablePicker();
+        return;
+      }
+
+      return;
+    }
+
+    if (combinedRootActive) {
+      const mod = e.ctrlKey || e.metaKey || e.altKey;
+
+      if (!mod && e.key.length === 1) {
+        e.preventDefault();
+        emptyBackspaceCountRef.current = 0;
+        setSearchQuery((s) => s + e.key);
+        requestAnimationFrame(() => updateInsertMenuPosition());
+        return;
+      }
+
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        emptyBackspaceCountRef.current += 1;
+        if (emptyBackspaceCountRef.current >= 2) {
+          dismissVariablePicker();
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashActiveIndex((prev) => (prev + 1) % COMBINED_ROOT_ROW_COUNT);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashActiveIndex((prev) => (prev - 1 + COMBINED_ROOT_ROW_COUNT) % COMBINED_ROOT_ROW_COUNT);
+        return;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'Enter') {
+        if (slashActiveIndex === 0) {
+          e.preventDefault();
+          drillIntoCombinedVariables();
+        } else {
+          e.preventDefault();
+          const block = SLASH_BLOCK_ROWS[slashActiveIndex - 1];
+          if (block) handleSlashSelect(block.id);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        dismissVariablePicker();
+        return;
+      }
+      return;
+    }
+
+    if (showSlashMenu && insertVersion === 'v2_5') {
+      const menuLen = SLASH_MENU_ROWS.length;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashActiveIndex((prev) => (prev + 1) % menuLen);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashActiveIndex((prev) => (prev - 1 + menuLen) % menuLen);
         return;
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (slashActiveIndex === 0) handleSlashSelect('insert-variables');
+        const row = SLASH_MENU_ROWS[slashActiveIndex];
+        if (row) handleSlashSelect(row.id);
         return;
       }
       if (e.key === 'Escape') {
@@ -525,19 +1026,21 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
       return;
     }
 
-    if (insertVersion === 'ideal' && !showDropdown && e.key === '{') {
-      breakoutTextRef.current = null;
+    if (insertVersion === 'ideal' && !showDropdown && !linkModalOpen && e.key === '/') {
       e.preventDefault();
-      setShowDropdown(true);
-      setSearchQuery('');
-      setActiveIndex(0);
-      requestAnimationFrame(() => updateDropdownPosition());
+      openVariableDropdownAtCaret();
       return;
     }
 
-    if (insertVersion === 'v3' && !showSlashMenu && !addModalOpen && e.key === '/') {
+    if (insertVersion === 'v2_5' && !showSlashMenu && !addModalOpen && !linkModalOpen && e.key === '/') {
       e.preventDefault();
       openSlashMenuAtCaret();
+      return;
+    }
+
+    if (insertVersion === 'v3_5' && !showSlashMenu && !linkModalOpen && e.key === '/') {
+      e.preventDefault();
+      openCombinedMenuAtCaret();
       return;
     }
 
@@ -615,16 +1118,37 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F8F9FA] p-12 flex justify-center relative scroll-smooth">
-      <div 
-        className="w-[850px] min-h-[1100px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] border border-gray-200 p-[96px] relative mb-12"
-      >
+    <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+      {insertVersion === 'v1_5' && (
+        <ObjectGraphCollapsedRail
+          panelOpen={sidePanelOpen}
+          onToggle={() => setSidePanelOpen((open) => !open)}
+        />
+      )}
+
+      {usesSidePanel(insertVersion) && sidePanelOpen && (
+        <ObjectGraphSidePanel
+          isOpen={sidePanelOpen}
+          onClose={() => setSidePanelOpen(false)}
+          onInsert={handleSharedInsert}
+          variant={insertVersion === 'v1_5' ? 'object-graph' : 'available-data'}
+          usedVariableIds={usedVariableIds}
+          closeVariant={insertVersion === 'v1_5' ? 'collapse' : 'close'}
+        />
+      )}
+
+      <div className="flex-1 min-h-0 overflow-y-auto bg-[#F8F9FA] p-12 flex justify-center relative scroll-smooth">
+        <div className="w-[850px] min-h-[1100px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] border border-gray-200 p-[96px] relative mb-12">
         <div
           ref={editorRef}
           contentEditable
           onInput={handleInput}
           onPaste={handlePaste}
+          onCopy={handleCopy}
+          onCut={handleCut}
           onClick={handleEditorClick}
+          onMouseMove={handleEditorMouseMove}
+          onMouseLeave={handleEditorMouseLeave}
           onKeyDown={handleKeyDown}
           className="w-full h-full min-h-[800px] outline-none border-none text-[16px] leading-[1.6] text-[#1A1A1A] font-normal whitespace-pre-wrap selection:bg-[#7A005D]/20 selection:text-[#7A005D]"
           style={{ cursor: 'text' }}
@@ -654,15 +1178,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           />
         )}
 
-        {insertVersion === 'v1' && (
-          <ObjectGraphSidePanel
-            isOpen={sidePanelOpen}
-            onClose={() => setSidePanelOpen(false)}
-            onInsert={handleSharedInsert}
-          />
-        )}
-
-        {(insertVersion === 'v2' || insertVersion === 'v3') && (
+        {usesAddVariablesModal(insertVersion) && (
           <AddVariablesModal
             isOpen={addModalOpen}
             onClose={() => setAddModalOpen(false)}
@@ -670,7 +1186,15 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           />
         )}
 
-        {insertVersion === 'v3' && showSlashMenu && (
+        {(insertVersion === 'v2_5' || insertVersion === 'v3_5') && (
+          <InsertLinkModal
+            isOpen={linkModalOpen}
+            onClose={() => setLinkModalOpen(false)}
+            onInsert={handleLinkInsert}
+          />
+        )}
+
+        {insertVersion === 'v2_5' && showSlashMenu && (
           <SlashBlockMenu
             top={slashMenuPos.top}
             left={slashMenuPos.left}
@@ -680,7 +1204,35 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           />
         )}
 
-        {recipientPicker.isOpen && insertVersion === 'ideal' && (
+        {usesCombinedInsertMenu(insertVersion) && showSlashMenu && (
+          <CombinedInsertMenu
+            top={slashMenuPos.top}
+            left={slashMenuPos.left}
+            combinedMenuView={combinedMenuView}
+            searchQuery={searchQuery}
+            searchResults={combinedSearchResults}
+            searchActiveIndex={searchActiveIndex}
+            rootActiveIndex={slashActiveIndex}
+            activeIndex={activeIndex}
+            variableDropdownRef={variableDropdownRef}
+            onSelect={handleVariableSelect}
+            onFilteredItemsChange={setFilteredItems}
+            onMenuNavigate={() => setActiveIndex(0)}
+            onVariableRowHover={setActiveIndex}
+            onDrillIntoVariables={drillIntoCombinedVariables}
+            onBackToRoot={() => {
+              setCombinedMenuView('root');
+              setSlashActiveIndex(0);
+            }}
+            onBlockSelect={handleSlashSelect}
+            onRootRowHover={setSlashActiveIndex}
+            onSearchRowHover={setSearchActiveIndex}
+            onSearchBlockSelect={handleSlashSelect}
+            onSearchVariableSelect={handleVariableSelect}
+          />
+        )}
+
+        {recipientPicker.isOpen && (insertVersion === 'ideal' || insertVersion === 'v3_5') && (
           <div
             className="fixed z-[1200] w-[340px] rounded-xl border border-gray-200 bg-white shadow-[0_18px_45px_rgba(0,0,0,0.16)] overflow-hidden"
             style={{ top: `${recipientPicker.top}px`, left: `${recipientPicker.left}px` }}
@@ -806,6 +1358,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           )}
         </div>
       </div>
+      </div>
 
       <div className="fixed right-0 top-1/2 -translate-y-1/2 flex items-center bg-white border border-gray-200 shadow-sm px-1 py-4 rounded-l-md cursor-pointer hover:bg-gray-50 z-20 group transition-all">
         <div className="[writing-mode:vertical-lr] rotate-180 text-[10px] font-bold text-gray-400 group-hover:text-gray-600 uppercase tracking-widest flex items-center gap-2">
@@ -813,6 +1366,13 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           <span className="h-1 w-1 bg-gray-300 rounded-full"></span>
         </div>
       </div>
+
+      {chipRouteTooltip && (
+        <VariableChipRouteTooltip
+          description={chipRouteTooltip.description}
+          anchorRect={chipRouteTooltip.rect}
+        />
+      )}
     </div>
   );
 };

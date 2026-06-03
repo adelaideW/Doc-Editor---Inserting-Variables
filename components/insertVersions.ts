@@ -1,4 +1,4 @@
-export type InsertVersion = 'ideal' | 'v1' | 'v2' | 'v3';
+export type InsertVersion = 'ideal' | 'v1' | 'v1_5' | 'v2' | 'v2_5' | 'v3_5';
 
 export type InsertVersionOption = {
   id: InsertVersion;
@@ -6,11 +6,30 @@ export type InsertVersionOption = {
   subtitle: string;
 };
 
+/** V3.5 (Ideal) is default; listed last in the dropdown. */
 export const INSERT_VERSIONS: InsertVersionOption[] = [
-  { id: 'ideal', label: 'Ideal', subtitle: 'Shortcut + inline dropdown' },
-  { id: 'v1', label: 'V1', subtitle: 'Side panel + modal' },
+  { id: 'v1', label: 'V1', subtitle: 'Side panel (search)' },
+  { id: 'v1_5', label: 'V1.5', subtitle: 'Side panel + collapsed rail' },
   { id: 'v2', label: 'V2', subtitle: 'Modal' },
-  { id: 'v3', label: 'V3', subtitle: 'Modal + shortcut' },
+  { id: 'v2_5', label: 'V2.5', subtitle: 'Modal + slash shortcut' },
+  { id: 'ideal', label: 'V3', subtitle: 'Slash + inline dropdown' },
+  { id: 'v3_5', label: 'V3.5 (Ideal)', subtitle: 'Slash + inline variables & blocks' },
 ];
 
-export const DEFAULT_INSERT_VERSION: InsertVersion = 'ideal';
+export const DEFAULT_INSERT_VERSION: InsertVersion = 'v3_5';
+
+export function usesSidePanel(version: InsertVersion): boolean {
+  return version === 'v1' || version === 'v1_5';
+}
+
+export function usesAddVariablesModal(version: InsertVersion): boolean {
+  return version === 'v2' || version === 'v2_5';
+}
+
+export function usesInlineVariableDropdown(version: InsertVersion): boolean {
+  return version === 'ideal' || version === 'v3_5';
+}
+
+export function usesCombinedInsertMenu(version: InsertVersion): boolean {
+  return version === 'v3_5';
+}
