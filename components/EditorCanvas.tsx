@@ -11,6 +11,7 @@ import {
 } from './insertVersions';
 import {
   applyChipVisualState,
+  clearChipSelectionHighlight,
   getChipsInSelection,
   insertClonedChipsAtCaret,
   insertHtmlAtCaret,
@@ -18,6 +19,7 @@ import {
   insertNumberedListAtCaret,
   insertVariableAtCaret,
   parseChipsFromHtml,
+  syncChipSelectionHighlight,
 } from './insertVariable/insertVariableAtCaret';
 import { getVariableDescription } from './insertVariable/variableDescriptions';
 import ObjectGraphSidePanel from './insertVariable/ObjectGraphSidePanel';
@@ -186,6 +188,27 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
   useEffect(() => {
     closeAllInsertOverlays();
   }, [insertVersion, closeAllInsertOverlays]);
+
+  useEffect(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+
+    const sync = () => syncChipSelectionHighlight(ed);
+    const clear = () => clearChipSelectionHighlight(ed);
+
+    document.addEventListener('selectionchange', sync);
+    ed.addEventListener('mouseup', sync);
+    ed.addEventListener('keyup', sync);
+    ed.addEventListener('blur', clear);
+
+    return () => {
+      document.removeEventListener('selectionchange', sync);
+      ed.removeEventListener('mouseup', sync);
+      ed.removeEventListener('keyup', sync);
+      ed.removeEventListener('blur', clear);
+      clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (insertVersion === 'v1_5') {
@@ -1150,7 +1173,7 @@ const EditorCanvas: React.FC<Props> = ({ insertTrigger, insertVersion }) => {
           onMouseMove={handleEditorMouseMove}
           onMouseLeave={handleEditorMouseLeave}
           onKeyDown={handleKeyDown}
-          className="w-full h-full min-h-[800px] outline-none border-none text-[16px] leading-[1.6] text-[#1A1A1A] font-normal whitespace-pre-wrap selection:bg-[#7A005D]/20 selection:text-[#7A005D]"
+          className="w-full h-full min-h-[800px] outline-none border-none text-[16px] leading-[1.6] text-[#1A1A1A] font-normal whitespace-pre-wrap selection:bg-[#7A005D]/40 selection:text-[#7A005D]"
           style={{ cursor: 'text' }}
           spellCheck={false}
         />

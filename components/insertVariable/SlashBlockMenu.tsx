@@ -25,24 +25,27 @@ interface MenuRow {
   label: string;
   subtitle?: string;
   icon: React.ReactNode;
-  disabled?: boolean;
 }
 
-const MENU_ROWS: MenuRow[] = [
+export const SLASH_MENU_ROWS: MenuRow[] = [
   {
     id: 'insert-variables',
     label: 'Insert variables',
     subtitle: 'Variables insert data from the object graph and are not editable when sending.',
     icon: <Variable size={16} className="text-gray-600 shrink-0" />,
   },
-  { id: 'bulleted-list', label: 'Bulleted list', icon: <List size={16} className="text-gray-500 shrink-0" />, disabled: true },
-  { id: 'numbered-list', label: 'Numbered list', icon: <ListOrdered size={16} className="text-gray-500 shrink-0" />, disabled: true },
-  { id: 'link', label: 'Link', icon: <Link size={16} className="text-gray-500 shrink-0" />, disabled: true },
-  { id: 'divider', label: 'Divider', icon: <Minus size={16} className="text-gray-500 shrink-0" />, disabled: true },
-  { id: 'quote', label: 'Quote', icon: <Quote size={16} className="text-gray-500 shrink-0" />, disabled: true },
-  { id: 'normal-text', label: 'Normal text', icon: <Type size={16} className="text-gray-500 shrink-0" />, disabled: true },
-  { id: 'code-snippet', label: 'Code snippet', icon: <Code size={16} className="text-gray-500 shrink-0" />, disabled: true },
+  { id: 'bulleted-list', label: 'Bulleted list', icon: <List size={16} className="text-gray-500 shrink-0" /> },
+  { id: 'numbered-list', label: 'Numbered list', icon: <ListOrdered size={16} className="text-gray-500 shrink-0" /> },
+  { id: 'link', label: 'Link', icon: <Link size={16} className="text-gray-500 shrink-0" /> },
+  { id: 'divider', label: 'Divider', icon: <Minus size={16} className="text-gray-500 shrink-0" /> },
+  { id: 'quote', label: 'Quote', icon: <Quote size={16} className="text-gray-500 shrink-0" /> },
+  { id: 'normal-text', label: 'Normal text', icon: <Type size={16} className="text-gray-500 shrink-0" /> },
+  { id: 'code-snippet', label: 'Code snippet', icon: <Code size={16} className="text-gray-500 shrink-0" /> },
 ];
+
+export const SLASH_BLOCK_ROWS = SLASH_MENU_ROWS.filter((row) => row.id !== 'insert-variables');
+
+export const INSERT_VARIABLES_ROW = SLASH_MENU_ROWS[0];
 
 interface Props {
   top: number;
@@ -59,27 +62,21 @@ const SlashBlockMenu: React.FC<Props> = ({ top, left, activeIndex, onSelect, onH
       style={{ top, left }}
       onMouseDown={(e) => e.preventDefault()}
     >
-      {MENU_ROWS.map((row, index) => {
+      {SLASH_MENU_ROWS.map((row, index) => {
         const active = index === activeIndex;
         return (
           <button
             key={row.id}
             type="button"
-            disabled={row.disabled}
             onMouseEnter={() => onHover(index)}
-            onClick={() => !row.disabled && onSelect(row.id)}
+            onClick={() => onSelect(row.id)}
             className={`w-full text-left px-3 py-2.5 flex gap-3 border-0 transition-colors ${
-              row.disabled
-                ? 'opacity-50 cursor-default bg-white'
-                : active
-                  ? 'bg-gray-100 cursor-pointer'
-                  : 'bg-white hover:bg-gray-50 cursor-pointer'
+              active ? 'bg-gray-100 cursor-pointer' : 'bg-white hover:bg-gray-50 cursor-pointer'
             }`}
           >
             <span className="mt-0.5">{row.icon}</span>
             <span className="min-w-0">
-              <span className={`block text-[14px] ${active && !row.disabled ? 'font-medium text-gray-900' : 'text-gray-800'}`}>
-                {active && row.id === 'insert-variables' ? '[x] ' : ''}
+              <span className={`block text-[14px] ${active ? 'font-medium text-gray-900' : 'text-gray-800'}`}>
                 {row.label}
               </span>
               {row.subtitle && (

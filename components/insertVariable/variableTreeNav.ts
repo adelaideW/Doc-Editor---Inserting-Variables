@@ -74,6 +74,63 @@ export function nodeToVariableItem(n: VariableMenuNode, breadcrumbs: string[]): 
   };
 }
 
+export type SearchLeafMatch = {
+  item: VariableItem;
+  /** Immediate parent folder label, e.g. "Employment status" */
+  inContext: string;
+  /** Top-level object label for grouping, e.g. "Employee" */
+  objectLabel: string;
+};
+
+export type SearchSectionGroup = {
+  sectionLabel: string;
+  matches: SearchLeafMatch[];
+};
+
+/** Leaf-only search scoped to V1 presentation sections; folders without matching leaves are omitted. */
+export function searchLeavesGroupedBySection(
+  query: string,
+  passesFilter: (nodeId: string) => boolean
+): SearchSectionGroup[] {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  const groups: SearchSectionGroup[] = [];
+
+  for (const section of OBJECT_GRAPH_SECTIONS) {
+    const roots = getSectionNodes(section.label);
+    const matches: SearchLeafMatch[] = [];
+
+    const walk = (node: VariableMenuNode, breadcrumbs: string[], objectLabel: string) => {
+      if (hasChildren(node)) {
+        const nextObject = breadcrumbs.length <= 1 ? node.label : objectLabel;
+        for (const child of node.children!) {
+          walk(child, [...breadcrumbs, node.label], nextObject);
+        }
+        return;
+      }
+
+      if (!passesFilter(node.id)) return;
+
+      const labelText = `${node.label} ${(node.searchKeywords ?? []).join(' ')}`.toLowerCase();
+      if (!tokens.every((token) => labelText.includes(token))) return;
+
+      const inContext = breadcrumbs[breadcrumbs.length - 1] ?? section.label;
+      matches.push({ item: nodeToVariableItem(node, breadcrumbs), inContext, objectLabel });
+    };
+
+    for (const root of roots) {
+      walk(root, [section.label], root.label);
+    }
+
+    if (matches.length > 0) {
+      groups.push({ sectionLabel: section.label, matches });
+    }
+  }
+
+  return groups;
+}
+
 export function searchVariableItems(query: string): VariableItem[] {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return [];

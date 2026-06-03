@@ -80,10 +80,29 @@ interface VariableDropdownProps {
   /** Called when the menu stack changes so the parent can reset keyboard highlight. */
   onMenuNavigate?: () => void;
   style?: React.CSSProperties;
+  /** When true, render list UI only (no outer shell positioning). */
+  embedded?: boolean;
+  /** When embedded, called when the user hovers a variable row. */
+  onRowHover?: (index: number) => void;
+  /** When embedded, suppress row focus styling if parent phase is not variables. */
+  showFocusHighlight?: boolean;
 }
 
 const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProps>(
-  ({ onSelect, searchQuery, activeIndex, onFilteredItemsChange, onMenuNavigate, style }, ref) => {
+  (
+    {
+      onSelect,
+      searchQuery,
+      activeIndex,
+      onFilteredItemsChange,
+      onMenuNavigate,
+      style,
+      embedded = false,
+      onRowHover,
+      showFocusHighlight = true,
+    },
+    ref
+  ) => {
     const [menuPathIds, setMenuPathIds] = useState<string[]>([]);
 
     const allNodes = useMemo(() => {
@@ -202,12 +221,8 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
 
     const showNestedHeader = breadcrumbTrail.length > 0 && !searchQuery.trim();
 
-    return (
-      <div
-        className="absolute bg-white border border-gray-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-[1050] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-w-[min(100vw-32px,620px)]"
-        style={{ ...style, width: undefined, minWidth: 280 }}
-        onMouseDown={(e) => e.preventDefault()}
-      >
+    const listContent = (
+      <>
         {showNestedHeader && (
           <button
             type="button"
@@ -230,15 +245,20 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
           </div>
         )}
 
-        <div className="flex flex-col py-2 overflow-y-auto max-h-[min(460px,calc(100vh-220px))]">
+        <div
+          className={`flex flex-col py-2 overflow-y-auto ${
+            embedded ? 'max-h-[240px]' : 'max-h-[min(460px,calc(100vh-220px))]'
+          }`}
+        >
           {filteredItems.length > 0 ? (
             filteredItems.map((item, index) => {
-              const isFocused = index === activeIndex;
+              const isFocused = showFocusHighlight && index === activeIndex;
               const expandable = !!item.hasChildren;
               return (
                 <button
                   type="button"
                   key={`${searchQuery}:${item.id}`}
+                  onMouseEnter={() => onRowHover?.(index)}
                   onClick={() => handleItemClick(item)}
                   className={`flex items-center gap-3 px-4 py-3 text-[14px] transition-colors cursor-pointer group text-left w-full border-0 bg-transparent rounded-none font-inherit ${
                     isFocused
@@ -266,6 +286,24 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
             </div>
           )}
         </div>
+      </>
+    );
+
+    if (embedded) {
+      return (
+        <div className="flex flex-col overflow-hidden" onMouseDown={(e) => e.preventDefault()}>
+          {listContent}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="absolute bg-white border border-gray-200 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-[1050] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-w-[min(100vw-32px,620px)]"
+        style={{ ...style, width: undefined, minWidth: 280 }}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        {listContent}
       </div>
     );
   }
