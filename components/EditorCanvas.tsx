@@ -39,6 +39,9 @@ import {
 import InsertLinkModal from './insertVariable/InsertLinkModal';
 import ImportModal from './insertVariable/ImportModal';
 import { applyImportToEditor, augmentItemForInsert } from './insertVariable/importContent';
+import { clearEditorContents, isFullEditorSelection } from './insertVariable/editorSelectionUtils';
+import LuminaAiPopover from './insertVariable/LuminaAiPopover';
+import { offerLetterDemoHtml } from './insertVariable/offerLetterDemoHtml';
 import RecipientAssignPopover, {
   type RecipientSelection,
 } from './insertVariable/RecipientAssignPopover';
@@ -89,6 +92,8 @@ const EditorCanvas: React.FC<Props> = ({
 }) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiInput, setShowAiInput] = useState(false);
+  const [aiPopoverOpen, setAiPopoverOpen] = useState(false);
+  const [aiPopoverPos, setAiPopoverPos] = useState({ top: 0, left: 0 });
   const [aiPrompt, setAiPrompt] = useState("");
 
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
@@ -152,6 +157,7 @@ const EditorCanvas: React.FC<Props> = ({
     setSidePanelOpen(false);
     setAddModalOpen(false);
     setLinkModalOpen(false);
+    setAiPopoverOpen(false);
     setShowSlashMenu(false);
     setSlashActiveIndex(0);
     setCombinedMenuView('root');
@@ -516,7 +522,35 @@ const EditorCanvas: React.FC<Props> = ({
     setActiveIndex(0);
   }, []);
 
+  const openLuminaAiPopover = useCallback(() => {
+    setAiPopoverPos(computeCaretAnchor());
+    setShowSlashMenu(false);
+    setCombinedMenuView('root');
+    setSearchQuery('');
+    setAiPopoverOpen(true);
+    setAiPrompt('');
+  }, [computeCaretAnchor]);
+
+  const handleLuminaGenerate = useCallback(async () => {
+    const ed = editorRef.current;
+    if (!ed || !aiPrompt.trim()) return;
+    setAiLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    ed.innerHTML = offerLetterDemoHtml();
+    setIsEmpty(false);
+    setAiPopoverOpen(false);
+    setAiPrompt('');
+    setAiLoading(false);
+    refreshUsedVariables();
+    notifyChange();
+  }, [aiPrompt, refreshUsedVariables, notifyChange]);
+
   const handleSlashSelect = useCallback((id: SlashMenuItemId) => {
+    if (id === 'write-with-ai') {
+      openLuminaAiPopover();
+      return;
+    }
+
     setShowSlashMenu(false);
     setCombinedMenuView('root');
     const ed = editorRef.current;
@@ -552,7 +586,12 @@ const EditorCanvas: React.FC<Props> = ({
     const htmlById: Record<
       Exclude<
         SlashMenuItemId,
-        'insert-variables' | 'import' | 'link' | 'bulleted-list' | 'numbered-list'
+        | 'write-with-ai'
+        | 'insert-variables'
+        | 'import'
+        | 'link'
+        | 'bulleted-list'
+        | 'numbered-list'
       >,
       string
     > = {
@@ -566,7 +605,7 @@ const EditorCanvas: React.FC<Props> = ({
       setIsEmpty(false);
       notifyChange();
     });
-  }, [insertVersion, onImportModalOpenChange, notifyChange]);
+  }, [insertVersion, onImportModalOpenChange, notifyChange, openLuminaAiPopover]);
 
   const handleImport = useCallback(
     async (payload: { file?: File; url?: string }) => {
@@ -755,6 +794,26 @@ const EditorCanvas: React.FC<Props> = ({
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const ed = editorRef.current;
+    const overlaysClosed =
+      !showDropdown &&
+      !showSlashMenu &&
+      !linkModalOpen &&
+      !importModalOpen &&
+      !addModalOpen &&
+      !aiPopoverOpen;
+
+    if (overlaysClosed && ed && (e.key === 'Delete' || e.key === 'Backspace')) {
+      if (isFullEditorSelection(ed)) {
+        e.preventDefault();
+        clearEditorContents(ed);
+        setIsEmpty(true);
+        refreshUsedVariables();
+        notifyChange();
+        return;
+      }
+    }
+
     const combinedMenuOpen = showSlashMenu && usesCombinedInsertMenu(insertVersion);
     const combinedSearchActive = combinedMenuOpen && searchQuery.trim().length > 0;
     const combinedDrillActive =
@@ -1042,13 +1101,16 @@ const EditorCanvas: React.FC<Props> = ({
       if (e.key === 'ArrowRight' || e.key === 'Enter') {
         if (slashActiveIndex === 0) {
           e.preventDefault();
-          drillIntoCombinedVariables();
+          handleSlashSelect('write-with-ai');
         } else if (slashActiveIndex === 1) {
+          e.preventDefault();
+          drillIntoCombinedVariables();
+        } else if (slashActiveIndex === 2) {
           e.preventDefault();
           handleSlashSelect('import');
         } else {
           e.preventDefault();
-          const block = SLASH_BLOCK_ROWS[slashActiveIndex - 2];
+          const block = SLASH_BLOCK_ROWS[slashActiveIndex - 3];
           if (block) handleSlashSelect(block.id);
         }
         return;
@@ -1099,7 +1161,7 @@ const EditorCanvas: React.FC<Props> = ({
       return;
     }
 
-    if (insertVersion === 'v3_5' && !showSlashMenu && !linkModalOpen && e.key === '/') {
+    if (insertVersion === 'v3_5' && !showSlashMenu && !linkModalOpen && !aiPopoverOpen && e.key === '/') {
       e.preventDefault();
       openCombinedMenuAtCaret();
       return;
@@ -1310,7 +1372,23 @@ const EditorCanvas: React.FC<Props> = ({
           onImport={handleImport}
         />
 
-        {/* Floating AI Helper */}
+        {aiPopoverOpen && insertVersion === 'v3_5' && (
+          <LuminaAiPopover
+            top={aiPopoverPos.top}
+            left={aiPopoverPos.left}
+            prompt={aiPrompt}
+            loading={aiLoading}
+            onPromptChange={setAiPrompt}
+            onCancel={() => {
+              setAiPopoverOpen(false);
+              setAiPrompt('');
+            }}
+            onGenerate={handleLuminaGenerate}
+          />
+        )}
+
+        {/* Floating AI Helper (hidden on V3.5 — use Write with AI in slash menu) */}
+        {insertVersion !== 'v3_5' && (
         <div className="absolute top-12 right-12">
           {showAiInput ? (
             <div className="bg-white border border-[#7A005D]/20 rounded-xl shadow-2xl p-4 w-80 animate-in fade-in zoom-in duration-200 z-30">
@@ -1343,6 +1421,7 @@ const EditorCanvas: React.FC<Props> = ({
             </button>
           )}
         </div>
+        )}
       </div>
       </div>
 

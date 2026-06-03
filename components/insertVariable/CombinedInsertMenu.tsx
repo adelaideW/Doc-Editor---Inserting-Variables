@@ -9,6 +9,7 @@ import {
   IMPORT_ROW,
   INSERT_VARIABLES_ROW,
   SLASH_BLOCK_ROWS,
+  WRITE_WITH_AI_ROW,
   type SlashMenuItemId,
 } from './SlashBlockMenu';
 
@@ -153,16 +154,39 @@ const CombinedInsertMenu: React.FC<Props> = ({
           <button
             type="button"
             onMouseEnter={() => onRootRowHover(0)}
-            onClick={onDrillIntoVariables}
+            onClick={() => onBlockSelect('write-with-ai')}
             className={`w-full text-left px-3 py-2.5 flex gap-3 items-start border-0 transition-colors ${
               rootActiveIndex === 0
                 ? 'bg-[#7A005D]/5 text-[#7A005D] cursor-pointer'
                 : 'bg-white hover:bg-gray-50 cursor-pointer text-gray-800'
             }`}
           >
-            <span className="mt-0.5">{insertVariablesRow.icon}</span>
+            <span className="mt-0.5">{WRITE_WITH_AI_ROW.icon}</span>
             <span className="min-w-0 flex-1">
               <span className={`block text-[14px] ${rootActiveIndex === 0 ? 'font-medium' : ''}`}>
+                {WRITE_WITH_AI_ROW.label}
+              </span>
+              {WRITE_WITH_AI_ROW.subtitle && (
+                <span className="block text-[11px] text-gray-500 mt-0.5 leading-snug">
+                  {WRITE_WITH_AI_ROW.subtitle}
+                </span>
+              )}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onMouseEnter={() => onRootRowHover(1)}
+            onClick={onDrillIntoVariables}
+            className={`w-full text-left px-3 py-2.5 flex gap-3 items-start border-0 transition-colors ${
+              rootActiveIndex === 1
+                ? 'bg-[#7A005D]/5 text-[#7A005D] cursor-pointer'
+                : 'bg-white hover:bg-gray-50 cursor-pointer text-gray-800'
+            }`}
+          >
+            <span className="mt-0.5">{insertVariablesRow.icon}</span>
+            <span className="min-w-0 flex-1">
+              <span className={`block text-[14px] ${rootActiveIndex === 1 ? 'font-medium' : ''}`}>
                 {insertVariablesRow.label}
               </span>
               {insertVariablesRow.subtitle && (
@@ -173,23 +197,23 @@ const CombinedInsertMenu: React.FC<Props> = ({
             </span>
             <ChevronRight
               size={14}
-              className={`shrink-0 mt-1 ${rootActiveIndex === 0 ? 'text-[#7A005D]' : 'text-gray-400'}`}
+              className={`shrink-0 mt-1 ${rootActiveIndex === 1 ? 'text-[#7A005D]' : 'text-gray-400'}`}
             />
           </button>
 
           <button
             type="button"
-            onMouseEnter={() => onRootRowHover(1)}
+            onMouseEnter={() => onRootRowHover(2)}
             onClick={() => onBlockSelect('import')}
             className={`w-full text-left px-3 py-2.5 flex gap-3 items-start border-0 transition-colors ${
-              rootActiveIndex === 1
+              rootActiveIndex === 2
                 ? 'bg-gray-100 cursor-pointer'
                 : 'bg-white hover:bg-gray-50 cursor-pointer'
             }`}
           >
             <span className="mt-0.5">{IMPORT_ROW.icon}</span>
             <span className="min-w-0 flex-1">
-              <span className={`block text-[14px] ${rootActiveIndex === 1 ? 'font-medium text-gray-900' : 'text-gray-800'}`}>
+              <span className={`block text-[14px] ${rootActiveIndex === 2 ? 'font-medium text-gray-900' : 'text-gray-800'}`}>
                 {IMPORT_ROW.label}
               </span>
               {IMPORT_ROW.subtitle && (
@@ -199,7 +223,7 @@ const CombinedInsertMenu: React.FC<Props> = ({
           </button>
 
           {SLASH_BLOCK_ROWS.map((row, index) => {
-            const rowIndex = index + 2;
+            const rowIndex = index + 3;
             const active = rootActiveIndex === rowIndex;
             return (
               <button

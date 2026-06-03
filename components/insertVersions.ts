@@ -12,8 +12,8 @@ export const INSERT_VERSIONS: InsertVersionOption[] = [
   { id: 'v1_5', label: 'V1.5', subtitle: 'Side panel + collapsed rail' },
   { id: 'v2', label: 'V2', subtitle: 'Modal' },
   { id: 'v2_5', label: 'V2.5', subtitle: 'Modal + slash shortcut' },
-  { id: 'ideal', label: 'V3', subtitle: 'Slash + inline dropdown' },
-  { id: 'v3_5', label: 'V3.5 (Ideal)', subtitle: 'Slash + inline variables & blocks' },
+  { id: 'ideal', label: 'V3', subtitle: 'Shortcut + variable dropdown.' },
+  { id: 'v3_5', label: 'V3.5 (Ideal)', subtitle: 'Shortcut + all function dropdown.' },
 ];
 
 export const DEFAULT_INSERT_VERSION: InsertVersion = 'v3_5';

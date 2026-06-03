@@ -3,7 +3,7 @@ import { usesRecipientChipPicker } from '../insertVersions';
 import type { VariableItem } from '../VariableDropdown';
 
 export function augmentItemForInsert(item: VariableItem, version: InsertVersion): VariableItem {
-  if (usesRecipientChipPicker(version) && item.recipientType) {
+  if (usesRecipientChipPicker(version) && item.recipientType === 'custom') {
     return { ...item, needsRecipient: true };
   }
   return item;

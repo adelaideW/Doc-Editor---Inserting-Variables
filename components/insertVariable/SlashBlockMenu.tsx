@@ -7,11 +7,13 @@ import {
   ListOrdered,
   Minus,
   Quote,
+  Sparkles,
   Type,
   Variable,
 } from 'lucide-react';
 
 export type SlashMenuItemId =
+  | 'write-with-ai'
   | 'insert-variables'
   | 'import'
   | 'bulleted-list'
@@ -54,6 +56,13 @@ export const SLASH_MENU_ROWS: MenuRow[] = [
 export const SLASH_BLOCK_ROWS = SLASH_MENU_ROWS.filter(
   (row) => row.id !== 'insert-variables' && row.id !== 'import'
 );
+
+export const WRITE_WITH_AI_ROW: MenuRow = {
+  id: 'write-with-ai',
+  label: 'Write with AI',
+  subtitle: 'Generate draft content with Lumina AI.',
+  icon: <Sparkles size={16} className="text-[#7A005D] shrink-0" />,
+};
 
 export const INSERT_VARIABLES_ROW = SLASH_MENU_ROWS[0];
 export const IMPORT_ROW = SLASH_MENU_ROWS[1];
