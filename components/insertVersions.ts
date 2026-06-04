@@ -35,7 +35,7 @@ export function usesCombinedInsertMenu(version: InsertVersion): boolean {
 }
 
 export function showsRecipientFieldsHeaderButton(version: InsertVersion): boolean {
-  return version === 'v1' || version === 'v1_5' || version === 'v2';
+  return version === 'v1' || version === 'v1_5' || version === 'v2' || version === 'v2_5';
 }
 
 export function usesRecipientChipPicker(version: InsertVersion): boolean {

@@ -547,3 +547,26 @@ export const VARIABLE_TREE: VariableMenuNode[] = [
     ],
   },
 ];
+
+/** V3 / V3.5 dropdown root: recipient field types + Rippling employee-field categories. */
+export const VARIABLE_DROPDOWN_ROOT: VariableMenuNode[] = [
+  VARIABLE_TREE[0],
+  {
+    id: 'root.employee-fields',
+    label: 'Employee fields',
+    searchKeywords: ['employee', 'employee fields', 'variables'],
+    children: VARIABLE_DROPDOWN_TREE,
+  },
+];
+
+/** Parenthetical count beside folder rows (root uses child count; categories use leaf count). */
+export function getDropdownFolderLabel(node: VariableMenuNode, pathIds: string[]): string {
+  if (!hasVariableChildren(node)) return node.label;
+  if (pathIds.length === 0) {
+    return `${node.label} (${node.children!.length})`;
+  }
+  if (pathIds.length === 1 && pathIds[0] === 'root.employee-fields') {
+    return `${node.label} (${countLeafNodes(node)})`;
+  }
+  return node.label;
+}

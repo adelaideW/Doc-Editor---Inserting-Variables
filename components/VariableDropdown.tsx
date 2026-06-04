@@ -2,8 +2,8 @@
 import React, { useMemo, useEffect, useState, forwardRef, useImperativeHandle, useCallback, useRef } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
 import {
-  VARIABLE_DROPDOWN_TREE,
-  countLeafNodes,
+  VARIABLE_DROPDOWN_ROOT,
+  getDropdownFolderLabel,
   type VariableMenuNode,
 } from './variablesCatalog';
 import { VARIABLE_LIST_MAX_HEIGHT_CLASS } from './insertVariable/variableListLayout';
@@ -23,8 +23,6 @@ export interface VariableItem {
   recipientType?: 'employee' | 'manager' | 'custom';
   fieldType?: 'text' | 'checkbox' | 'signature' | 'date-signed';
   needsRecipient?: boolean;
-  /** Shown at root as “Label (n)” for category folders. */
-  childCount?: number;
 }
 
 type LeafWithPath = { node: VariableMenuNode; breadcrumbs: string[] };
@@ -114,7 +112,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
 
     const allNodes = useMemo(() => {
       const acc: LeafWithPath[] = [];
-      flattenAll(VARIABLE_DROPDOWN_TREE, [], acc);
+      flattenAll(VARIABLE_DROPDOWN_ROOT, [], acc);
       return acc;
     }, []);
 
@@ -136,14 +134,8 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
           }));
       }
 
-      const level = getChildrenAtPath(VARIABLE_DROPDOWN_TREE, menuPathIds);
-      return level.map((n) => {
-        const item = toVariableItemFromNode(n, []);
-        if (menuPathIds.length === 0 && item.hasChildren) {
-          return { ...item, childCount: countLeafNodes(n) };
-        }
-        return item;
-      });
+      const level = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, menuPathIds);
+      return level.map((n) => toVariableItemFromNode(n, []));
     }, [searchQuery, menuPathIds, allNodes]);
 
     const activeIndexRef = useRef(activeIndex);
@@ -217,7 +209,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
     const breadcrumbTrail = useMemo(() => {
       if (!menuPathIds.length || searchQuery.trim()) return [];
       const labels: string[] = [];
-      let level = VARIABLE_DROPDOWN_TREE;
+      let level = VARIABLE_DROPDOWN_ROOT;
       for (const id of menuPathIds) {
         const node = level.find((n) => n.id === id);
         if (!node) break;
@@ -227,8 +219,19 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
       return labels;
     }, [menuPathIds, searchQuery]);
 
-    const rowLabel = (item: VariableItem) =>
-      item.childCount != null ? `${item.label} (${item.childCount})` : item.label;
+    const rowLabel = (item: VariableItem) => {
+      if (!item.hasChildren || searchQuery.trim()) return item.label;
+      let level = VARIABLE_DROPDOWN_ROOT;
+      let node: VariableMenuNode | undefined;
+      for (const id of menuPathIds) {
+        node = level.find((n) => n.id === id);
+        if (!node) break;
+        level = node.children ?? [];
+      }
+      const current = level.find((n) => n.id === item.id);
+      if (!current) return item.label;
+      return getDropdownFolderLabel(current, menuPathIds);
+    };
 
     const goBack = () => {
       setMenuPathIds((prev) => prev.slice(0, -1));

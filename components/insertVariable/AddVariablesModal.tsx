@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Search, X } from 'lucide-react';
 import {
-  VARIABLE_DROPDOWN_TREE,
-  countLeafNodes,
+  VARIABLE_DROPDOWN_ROOT,
+  getDropdownFolderLabel,
   hasVariableChildren,
   type VariableMenuNode,
 } from '../variablesCatalog';
@@ -37,7 +37,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
   useEffect(() => {
     if (!isOpen) return;
     setSearch('');
-    const first = VARIABLE_DROPDOWN_TREE[0];
+    const first = VARIABLE_DROPDOWN_ROOT[0];
     setCol1Id(first?.id ?? null);
     const firstChild = first?.children?.[0];
     setCol2Id(firstChild?.id ?? null);
@@ -47,7 +47,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
     requestAnimationFrame(() => dialogRef.current?.focus());
   }, [isOpen]);
 
-  const col1Items = VARIABLE_DROPDOWN_TREE;
+  const col1Items = VARIABLE_DROPDOWN_ROOT;
   const col2Items = useMemo(() => {
     if (!col1Id) return [];
     const node = col1Items.find((n) => n.id === col1Id);
@@ -60,10 +60,12 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
     return node?.children ?? [];
   }, [col2Id, col2Items]);
 
-  const breadcrumbs = useMemo(() => {
-    const ids = [col1Id, col2Id].filter(Boolean) as string[];
-    return getBreadcrumbLabels(ids);
-  }, [col1Id, col2Id]);
+  const breadcrumbPathIds = useMemo(
+    () => [col1Id, col2Id].filter(Boolean) as string[],
+    [col1Id, col2Id]
+  );
+
+  const breadcrumbs = useMemo(() => getBreadcrumbLabels(breadcrumbPathIds), [breadcrumbPathIds]);
 
   const searchResults = useMemo(() => searchVariableItems(search), [search]);
   const isSearchMode = search.trim().length > 0;
@@ -316,7 +318,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
                   setActiveRowIndex(col1Items.findIndex((n) => n.id === node.id));
                 }}
                 showChevron
-                showCategoryCounts
+                breadcrumbPathIds={[]}
               />
               <ColumnList
                 items={col2Items}
@@ -333,6 +335,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
                   setActiveRowIndex(col2Items.findIndex((n) => n.id === node.id));
                 }}
                 showChevron
+                breadcrumbPathIds={col1Id ? [col1Id] : []}
               />
               <ColumnList
                 items={col3Items}
@@ -389,7 +392,7 @@ function ColumnList({
   onRowHover,
   onSelect,
   showChevron,
-  showCategoryCounts,
+  breadcrumbPathIds = [],
   highlightLeaf,
 }: {
   items: VariableMenuNode[];
@@ -399,7 +402,7 @@ function ColumnList({
   onRowHover: (index: number) => void;
   onSelect: (node: VariableMenuNode) => void;
   showChevron: boolean;
-  showCategoryCounts?: boolean;
+  breadcrumbPathIds?: string[];
   highlightLeaf?: boolean;
 }) {
   return (
@@ -408,10 +411,9 @@ function ColumnList({
         const isSelected = selectedId === node.id;
         const isHighlighted = highlightedId === node.id;
         const expandable = hasVariableChildren(node);
-        const rowLabel =
-          showCategoryCounts && expandable
-            ? `${node.label} (${countLeafNodes(node)})`
-            : node.label;
+        const rowLabel = expandable
+          ? getDropdownFolderLabel(node, breadcrumbPathIds)
+          : node.label;
         const showPathSelected = isSelected && !isKeyboardColumn;
         return (
           <button
