@@ -548,24 +548,27 @@ export const VARIABLE_TREE: VariableMenuNode[] = [
   },
 ];
 
-/** V3 / V3.5 dropdown root: recipient field types + Rippling employee-field categories. */
-export const VARIABLE_DROPDOWN_ROOT: VariableMenuNode[] = [
-  VARIABLE_TREE[0],
-  {
-    id: 'root.employee-fields',
-    label: 'Employee fields',
-    searchKeywords: ['employee', 'employee fields', 'variables'],
-    children: VARIABLE_DROPDOWN_TREE,
-  },
-];
+function sortNodesByLabel(nodes: VariableMenuNode[]): VariableMenuNode[] {
+  return [...nodes].sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+  );
+}
 
-/** Parenthetical count beside folder rows (root uses child count; categories use leaf count). */
+/**
+ * Flat dropdown root: recipient field types first (A–Z), then employee categories (A–Z).
+ * No “Recipient fields” / “Employee fields” wrapper folders.
+ */
+function buildVariableDropdownRoot(): VariableMenuNode[] {
+  const recipientChildren = VARIABLE_TREE[0]?.children ?? [];
+  return [...sortNodesByLabel(recipientChildren), ...sortNodesByLabel(VARIABLE_DROPDOWN_TREE)];
+}
+
+export const VARIABLE_DROPDOWN_ROOT: VariableMenuNode[] = buildVariableDropdownRoot();
+
+/** Parenthetical count beside folder rows at the flat root list. */
 export function getDropdownFolderLabel(node: VariableMenuNode, pathIds: string[]): string {
   if (!hasVariableChildren(node)) return node.label;
   if (pathIds.length === 0) {
-    return `${node.label} (${node.children!.length})`;
-  }
-  if (pathIds.length === 1 && pathIds[0] === 'root.employee-fields') {
     return `${node.label} (${countLeafNodes(node)})`;
   }
   return node.label;
