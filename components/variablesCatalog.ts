@@ -154,54 +154,6 @@ const EMPLOYMENT_STATUS_FIELDS = [
   'I-9 verification status',
 ];
 
-/**
- * Root categories for inline / modal variable dropdowns (V3-style Rippling object graph).
- * Counts match demo targets; gaps filled with placeholders when the catalog has fewer labels.
- */
-export const VARIABLE_DROPDOWN_TREE: VariableMenuNode[] = [
-  dropdownCategory('cat.country-personal', 'Country-specific personal information', [
-    'Country-specific personal inform...',
-  ], 1),
-  dropdownCategory(
-    'cat.employee-personal',
-    'Employee personal information',
-    CUSTOM_DOCUMENT_EMPLOYEE.slice(0, 19),
-    19
-  ),
-  dropdownCategory('cat.employee-login', 'Employee login details', EMPLOYEE_LOGIN_FIELDS, 7),
-  dropdownCategory(
-    'cat.entity-contractor',
-    'Entity contractor details',
-    CUSTOM_DOCUMENT_CONSULTANT,
-    13
-  ),
-  dropdownCategory(
-    'cat.employment-info',
-    'Employment information',
-    [
-      ...CUSTOM_DOCUMENT_EMPLOYEE,
-      ...EMPLOYEE_RECIPIENT_FIELD_GROUPS,
-      'Start Date',
-      'Manager Name',
-      'Manager title',
-      'Standard weekly hours',
-      'Work location name',
-      'Duties',
-      'department',
-      'Title',
-    ],
-    47
-  ),
-  dropdownCategory('cat.employee-contractor', 'Employee contractor details', ['Employee contractor details'], 1),
-  dropdownCategory('cat.country-employment', 'Country-specific employment information', [
-    'Country-specific employment inf...',
-  ], 1),
-  dropdownCategory('cat.compensation', 'Compensation', COMPENSATION_FIELDS, 36),
-  dropdownCategory('cat.employment-status', 'Employment status', EMPLOYMENT_STATUS_FIELDS, 16),
-  dropdownCategory('cat.recruiting', 'Recruiting', ['Recruiting requisition ID'], 1),
-  dropdownCategory('cat.third-party', 'Third Party Apps', ['Third Party Apps', 'Connected app name'], 2),
-];
-
 /** Original “Rippling recipient” employee sub-groups (each chip used the visible label text). */
 const EMPLOYEE_RECIPIENT_FIELD_GROUPS = [
   'Employee details',
@@ -283,6 +235,54 @@ const CUSTOM_DOCUMENT_EMPLOYEE = [
   "Manager's work email",
   "Manager's phone number",
   'Personal leave days per year',
+];
+
+/**
+ * Root categories for inline / modal variable dropdowns (V3-style Rippling object graph).
+ * Counts match demo targets; gaps filled with placeholders when the catalog has fewer labels.
+ */
+export const VARIABLE_DROPDOWN_TREE: VariableMenuNode[] = [
+  dropdownCategory('cat.country-personal', 'Country-specific personal information', [
+    'Country-specific personal inform...',
+  ], 1),
+  dropdownCategory(
+    'cat.employee-personal',
+    'Employee personal information',
+    CUSTOM_DOCUMENT_EMPLOYEE.slice(0, 19),
+    19
+  ),
+  dropdownCategory('cat.employee-login', 'Employee login details', EMPLOYEE_LOGIN_FIELDS, 7),
+  dropdownCategory(
+    'cat.entity-contractor',
+    'Entity contractor details',
+    CUSTOM_DOCUMENT_CONSULTANT,
+    13
+  ),
+  dropdownCategory(
+    'cat.employment-info',
+    'Employment information',
+    [
+      ...CUSTOM_DOCUMENT_EMPLOYEE,
+      ...EMPLOYEE_RECIPIENT_FIELD_GROUPS,
+      'Start Date',
+      'Manager Name',
+      'Manager title',
+      'Standard weekly hours',
+      'Work location name',
+      'Duties',
+      'department',
+      'Title',
+    ],
+    47
+  ),
+  dropdownCategory('cat.employee-contractor', 'Employee contractor details', ['Employee contractor details'], 1),
+  dropdownCategory('cat.country-employment', 'Country-specific employment information', [
+    'Country-specific employment inf...',
+  ], 1),
+  dropdownCategory('cat.compensation', 'Compensation', COMPENSATION_FIELDS, 36),
+  dropdownCategory('cat.employment-status', 'Employment status', EMPLOYMENT_STATUS_FIELDS, 16),
+  dropdownCategory('cat.recruiting', 'Recruiting', ['Recruiting requisition ID'], 1),
+  dropdownCategory('cat.third-party', 'Third Party Apps', ['Third Party Apps', 'Connected app name'], 2),
 ];
 
 /** Extended document placeholders (titles, numbering, envelopes, archival). */
