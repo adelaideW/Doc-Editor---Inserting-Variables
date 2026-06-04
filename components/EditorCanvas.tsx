@@ -22,8 +22,10 @@ import {
   syncChipSelectionHighlight,
 } from './insertVariable/insertVariableAtCaret';
 import {
-  getVariableDescription,
-  type RecipientFieldMeta,
+  getChipVariableDescription,
+  getRecipientMetaForAssignment,
+  parseRecipientFieldType,
+  syncChipVariableDescription,
 } from './insertVariable/variableDescriptions';
 import ObjectGraphSidePanel from './insertVariable/ObjectGraphSidePanel';
 import ObjectGraphCollapsedRail from './insertVariable/ObjectGraphCollapsedRail';
@@ -258,7 +260,17 @@ const EditorCanvas: React.FC<Props> = ({
         chip.setAttribute('data-recipient-kind', 'internal');
       }
 
+      const fieldType = parseRecipientFieldType(chip.getAttribute('data-field-type'));
+      const meta = getRecipientMetaForAssignment(selection, fieldType);
+      chip.setAttribute('data-recipient-type', meta.recipientType);
+      if (meta.assignedRoleLabel) {
+        chip.setAttribute('data-assigned-role-label', meta.assignedRoleLabel);
+      } else {
+        chip.removeAttribute('data-assigned-role-label');
+      }
+
       chip.setAttribute('data-needs-recipient', 'false');
+      syncChipVariableDescription(chip);
       chip.title =
         `${chip.getAttribute('data-variable') ?? ''} — ${chip.getAttribute('data-related-recipient') ?? ''}`.trim();
       applyChipVisualState(chip, false);
@@ -749,26 +761,7 @@ const EditorCanvas: React.FC<Props> = ({
   const handleEditorMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const chip = (e.target as HTMLElement).closest('.variable-chip') as HTMLElement | null;
     if (chip?.classList.contains('variable-chip')) {
-      const label = chip.getAttribute('data-variable') ?? '';
-      const stored = chip.getAttribute('data-variable-description');
-      const recipientType = chip.getAttribute('data-recipient-type');
-      const fieldType = chip.getAttribute('data-field-type');
-      const recipientMeta: RecipientFieldMeta | undefined =
-        recipientType === 'employee' ||
-        recipientType === 'manager' ||
-        recipientType === 'custom'
-          ? {
-              recipientType,
-              fieldType:
-                fieldType === 'text' ||
-                fieldType === 'checkbox' ||
-                fieldType === 'signature' ||
-                fieldType === 'date-signed'
-                  ? fieldType
-                  : undefined,
-            }
-          : undefined;
-      const description = stored || getVariableDescription(label, recipientMeta);
+      const description = getChipVariableDescription(chip);
       if (description) {
         setChipRouteTooltip({ description, rect: chip.getBoundingClientRect() });
         return;
@@ -1331,6 +1324,7 @@ const EditorCanvas: React.FC<Props> = ({
         {usesAddVariablesModal(insertVersion) && (
           <AddVariablesModal
             isOpen={addModalOpen}
+            insertVersion={insertVersion}
             onClose={() => setAddModalOpen(false)}
             onInsert={handleSharedInsert}
           />

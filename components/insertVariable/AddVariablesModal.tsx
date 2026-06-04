@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Search, X } from 'lucide-react';
 import {
   VARIABLE_DROPDOWN_ROOT,
@@ -7,9 +7,12 @@ import {
   type VariableMenuNode,
 } from '../variablesCatalog';
 import { VARIABLE_LIST_MAX_HEIGHT_CLASS } from './variableListLayout';
+import type { InsertVersion } from '../insertVersions';
 import type { VariableItem } from '../VariableDropdown';
 import {
+  findNodeById,
   getBreadcrumbLabels,
+  getChildrenAtPath,
   hasChildren,
   nodeToVariableItem,
   searchVariableItems,
@@ -17,132 +20,149 @@ import {
 
 interface Props {
   isOpen: boolean;
+  insertVersion: InsertVersion;
   onClose: () => void;
   onInsert: (item: VariableItem) => void;
 }
 
-type ActiveCol = 1 | 2 | 3;
+type ActivePane = 'left' | 'right';
 
-const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
+const RECIPIENT_DEMO_ROOT_ID = 'root.recipient-fields';
+
+const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, onInsert }) => {
   const [search, setSearch] = useState('');
-  const [col1Id, setCol1Id] = useState<string | null>(null);
-  const [col2Id, setCol2Id] = useState<string | null>(null);
+  const [pathIds, setPathIds] = useState<string[]>([]);
+  const [leftSelectedId, setLeftSelectedId] = useState<string | null>(null);
   const [selectedLeaf, setSelectedLeaf] = useState<VariableItem | null>(null);
-  const [activeCol, setActiveCol] = useState<ActiveCol>(1);
+  const [activePane, setActivePane] = useState<ActivePane>('left');
   const [activeRowIndex, setActiveRowIndex] = useState(0);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const resetNavigation = useCallback(() => {
+    const leftItems = VARIABLE_DROPDOWN_ROOT;
+    const demoStart =
+      insertVersion === 'v2' || insertVersion === 'v2_5'
+        ? leftItems.find((n) => n.id === RECIPIENT_DEMO_ROOT_ID)
+        : undefined;
+    const first = demoStart ?? leftItems[0];
+    setPathIds([]);
+    setLeftSelectedId(first?.id ?? null);
+    setSelectedLeaf(null);
+    setActivePane('left');
+    setActiveRowIndex(demoStart ? leftItems.findIndex((n) => n.id === demoStart.id) : 0);
+  }, [insertVersion]);
+
   useEffect(() => {
     if (!isOpen) return;
     setSearch('');
-    const first = VARIABLE_DROPDOWN_ROOT[0];
-    setCol1Id(first?.id ?? null);
-    const firstChild = first?.children?.[0];
-    setCol2Id(firstChild?.id ?? null);
-    setSelectedLeaf(null);
-    setActiveCol(1);
-    setActiveRowIndex(0);
+    resetNavigation();
     requestAnimationFrame(() => dialogRef.current?.focus());
-  }, [isOpen]);
+  }, [isOpen, resetNavigation]);
 
-  const col1Items = VARIABLE_DROPDOWN_ROOT;
-  const col2Items = useMemo(() => {
-    if (!col1Id) return [];
-    const node = col1Items.find((n) => n.id === col1Id);
-    return node?.children ?? [];
-  }, [col1Id, col1Items]);
-
-  const col3Items = useMemo(() => {
-    if (!col2Id) return [];
-    const node = col2Items.find((n) => n.id === col2Id);
-    return node?.children ?? [];
-  }, [col2Id, col2Items]);
-
-  const breadcrumbPathIds = useMemo(
-    () => [col1Id, col2Id].filter(Boolean) as string[],
-    [col1Id, col2Id]
+  const leftItems = useMemo(
+    () => getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, pathIds),
+    [pathIds]
   );
 
-  const breadcrumbs = useMemo(() => getBreadcrumbLabels(breadcrumbPathIds), [breadcrumbPathIds]);
+  const leftSelectedNode = useMemo(
+    () => (leftSelectedId ? findNodeById(VARIABLE_DROPDOWN_ROOT, leftSelectedId) : null),
+    [leftSelectedId]
+  );
+
+  const rightItems = useMemo(() => leftSelectedNode?.children ?? [], [leftSelectedNode]);
+
+  const breadcrumbLabels = useMemo(() => getBreadcrumbLabels(pathIds), [pathIds]);
 
   const searchResults = useMemo(() => searchVariableItems(search), [search]);
   const isSearchMode = search.trim().length > 0;
+  const showRightColumn = !isSearchMode && rightItems.length > 0;
 
-  const activeColumnItems = useMemo(() => {
+  const activeListItems = useMemo((): VariableMenuNode[] | VariableItem[] => {
     if (isSearchMode) return searchResults;
-    if (activeCol === 1) return col1Items;
-    if (activeCol === 2) return col2Items;
-    return col3Items;
-  }, [isSearchMode, searchResults, activeCol, col1Items, col2Items, col3Items]);
+    return activePane === 'left' ? leftItems : rightItems;
+  }, [isSearchMode, searchResults, activePane, leftItems, rightItems]);
 
   const highlightedId = useMemo(() => {
-    if (isSearchMode) {
-      const item = searchResults[activeRowIndex];
-      return item?.id ?? null;
-    }
-    const items = activeCol === 1 ? col1Items : activeCol === 2 ? col2Items : col3Items;
+    if (isSearchMode) return searchResults[activeRowIndex]?.id ?? null;
+    const items = activePane === 'left' ? leftItems : rightItems;
     return items[activeRowIndex]?.id ?? null;
-  }, [isSearchMode, searchResults, activeRowIndex, activeCol, col1Items, col2Items, col3Items]);
+  }, [isSearchMode, searchResults, activeRowIndex, activePane, leftItems, rightItems]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const len = activeColumnItems.length;
+    const len = activeListItems.length;
     if (len === 0) return;
     setActiveRowIndex((i) => Math.min(i, len - 1));
-  }, [activeColumnItems.length, isOpen]);
+  }, [activeListItems.length, isOpen]);
 
   useEffect(() => {
     if (!isOpen || highlightedId == null) return;
     const el = document.querySelector(`[data-modal-highlight-id="${highlightedId}"]`);
     el?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
-  }, [highlightedId, activeCol, activeRowIndex, isOpen]);
+  }, [highlightedId, activePane, activeRowIndex, isOpen]);
 
-  const pickLeaf = (node: VariableMenuNode, crumbs: string[]) => {
+  const crumbPathForLabels = useMemo(() => pathIds, [pathIds]);
+
+  const pickLeaf = (node: VariableMenuNode, extraPath: string[]) => {
     if (hasChildren(node)) return;
+    const crumbs = getBreadcrumbLabels(extraPath);
     setSelectedLeaf(nodeToVariableItem(node, crumbs));
   };
 
-  const handleCol1 = (node: VariableMenuNode) => {
-    setCol1Id(node.id);
-    const firstChild = node.children?.[0];
-    setCol2Id(firstChild?.id ?? null);
+  const selectLeftRow = (node: VariableMenuNode, index: number) => {
+    setLeftSelectedId(node.id);
+    setActivePane('left');
+    setActiveRowIndex(index);
     setSelectedLeaf(null);
   };
 
-  const handleCol2 = (node: VariableMenuNode) => {
-    setCol2Id(node.id);
-    setSelectedLeaf(null);
+  const selectRightRow = (node: VariableMenuNode, index: number) => {
+    setActivePane('right');
+    setActiveRowIndex(index);
     if (!hasChildren(node)) {
-      const crumbs = col1Id ? getBreadcrumbLabels([col1Id]) : [];
-      pickLeaf(node, crumbs);
-    }
-  };
-
-  const handleCol3 = (node: VariableMenuNode) => {
-    const crumbs = getBreadcrumbLabels([col1Id!, col2Id!].filter(Boolean) as string[]);
-    pickLeaf(node, crumbs);
-  };
-
-  const activateRow = (node: VariableMenuNode) => {
-    if (isSearchMode) {
-      setSelectedLeaf(node as unknown as VariableItem);
-      return;
-    }
-    if (activeCol === 1) {
-      handleCol1(node);
-      setActiveCol(2);
-      setActiveRowIndex(0);
-    } else if (activeCol === 2) {
-      handleCol2(node);
-      if (hasChildren(node)) {
-        setActiveCol(3);
-        setActiveRowIndex(0);
-      }
+      pickLeaf(node, [...pathIds, leftSelectedId!].filter(Boolean));
     } else {
-      handleCol3(node);
+      setSelectedLeaf(null);
     }
+  };
+
+  const drillIntoNode = (nodeId: string) => {
+    const node = findNodeById(VARIABLE_DROPDOWN_ROOT, nodeId);
+    if (!node || !hasChildren(node)) return;
+    const nextPath = [...pathIds, nodeId];
+    const children = node.children ?? [];
+    const firstChild = children[0];
+    setPathIds(nextPath);
+    setLeftSelectedId(firstChild?.id ?? null);
+    setActivePane('left');
+    setActiveRowIndex(0);
+    setSelectedLeaf(null);
+  };
+
+  const goToPathDepth = (depth: number) => {
+    const nextPath = pathIds.slice(0, depth);
+    const items = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, nextPath);
+    const first = items[0];
+    setPathIds(nextPath);
+    setLeftSelectedId(first?.id ?? null);
+    setActivePane('left');
+    setActiveRowIndex(0);
+    setSelectedLeaf(null);
+  };
+
+  const goBackOneLevel = () => {
+    if (pathIds.length === 0) return;
+    const nextPath = pathIds.slice(0, -1);
+    const items = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, nextPath);
+    const parentId = pathIds[pathIds.length - 1];
+    const stillInList = items.some((n) => n.id === parentId);
+    setPathIds(nextPath);
+    setLeftSelectedId(stillInList ? parentId : items[0]?.id ?? null);
+    setActivePane('left');
+    setActiveRowIndex(Math.max(0, items.findIndex((n) => n.id === (stillInList ? parentId : items[0]?.id))));
+    setSelectedLeaf(null);
   };
 
   const handleInsert = () => {
@@ -168,7 +188,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
       }
     }
 
-    const items = activeColumnItems;
+    const items = activeListItems;
     const len = items.length;
     if (len === 0 && !isSearchMode) return;
 
@@ -182,37 +202,42 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
       setActiveRowIndex((i) => (i - 1 + Math.max(len, 1)) % Math.max(len, 1));
       return;
     }
-    if (e.key === 'ArrowRight' && !isSearchMode) {
-      e.preventDefault();
-      const node = items[activeRowIndex] as VariableMenuNode | undefined;
-      if (!node) return;
 
-      if (activeCol === 1) {
-        if (!hasChildren(node)) return;
-        handleCol1(node);
-        setActiveCol(2);
-        setActiveRowIndex(0);
-      } else if (activeCol === 2) {
-        if (!hasChildren(node)) return;
-        handleCol2(node);
-        setActiveCol(3);
-        setActiveRowIndex(0);
+    if (!isSearchMode) {
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const node = (activePane === 'left' ? leftItems : rightItems)[activeRowIndex];
+        if (!node) return;
+        if (activePane === 'left') {
+          if (hasChildren(node)) {
+            selectLeftRow(node, activeRowIndex);
+            drillIntoNode(node.id);
+          } else if (showRightColumn) {
+            setActivePane('right');
+            setActiveRowIndex(0);
+          }
+        }
+        return;
       }
-      return;
-    }
-    if (e.key === 'ArrowLeft' && !isSearchMode) {
-      e.preventDefault();
-      if (activeCol === 3) {
-        setActiveCol(2);
-        const idx = col2Items.findIndex((n) => n.id === col2Id);
-        setActiveRowIndex(idx >= 0 ? idx : 0);
-      } else if (activeCol === 2) {
-        setActiveCol(1);
-        const idx = col1Items.findIndex((n) => n.id === col1Id);
-        setActiveRowIndex(idx >= 0 ? idx : 0);
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (activePane === 'right') {
+          setActivePane('left');
+          const idx = leftItems.findIndex((n) => n.id === leftSelectedId);
+          setActiveRowIndex(idx >= 0 ? idx : 0);
+        } else {
+          goBackOneLevel();
+        }
+        return;
       }
-      return;
+      if (e.key === 'Tab' && showRightColumn) {
+        e.preventDefault();
+        setActivePane((p) => (p === 'left' ? 'right' : 'left'));
+        setActiveRowIndex(0);
+        return;
+      }
     }
+
     if (e.key === 'Enter') {
       e.preventDefault();
       if (isSearchMode) {
@@ -220,8 +245,17 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
         if (item) setSelectedLeaf(item);
         return;
       }
-      const node = items[activeRowIndex] as VariableMenuNode | undefined;
-      if (node) activateRow(node);
+      const node = (activePane === 'left' ? leftItems : rightItems)[activeRowIndex];
+      if (!node) return;
+      if (activePane === 'left') {
+        if (hasChildren(node)) {
+          drillIntoNode(node.id);
+        } else {
+          selectLeftRow(node, activeRowIndex);
+        }
+      } else {
+        selectRightRow(node, activeRowIndex);
+      }
     }
   };
 
@@ -236,7 +270,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
         aria-modal
         tabIndex={-1}
         aria-labelledby="add-variables-title"
-        className="relative w-full max-w-[820px] h-[560px] max-h-[calc(100vh-48px)] bg-white rounded-xl shadow-[0_24px_60px_rgba(0,0,0,0.18)] flex flex-col overflow-hidden outline-none"
+        className="relative w-full max-w-[720px] h-[560px] max-h-[calc(100vh-48px)] bg-white rounded-xl shadow-[0_24px_60px_rgba(0,0,0,0.18)] flex flex-col overflow-hidden outline-none"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -253,7 +287,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
               onChange={(e) => {
                 setSearch(e.target.value);
                 setActiveRowIndex(0);
-                setActiveCol(1);
+                setActivePane('left');
               }}
               placeholder="Search"
               className="w-full pl-9 pr-3 py-2 text-[13px] border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#7A005D]/15"
@@ -297,63 +331,79 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
           </div>
         ) : (
           <>
-            {breadcrumbs.length > 0 && (
-              <div className="px-5 py-2 text-[12px] text-gray-400 border-b border-gray-50 shrink-0">
-                {breadcrumbs.join(' › ')}
-              </div>
-            )}
-            <div className={`flex flex-1 min-h-0 divide-x divide-gray-100 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
+            <nav
+              className="px-5 py-2 text-[12px] text-gray-500 border-b border-gray-50 shrink-0 flex flex-wrap items-center gap-1"
+              aria-label="Variable browser path"
+            >
+              <button
+                type="button"
+                onClick={() => goToPathDepth(0)}
+                className={`border-0 bg-transparent p-0 text-[12px] ${
+                  pathIds.length === 0
+                    ? 'text-gray-900 font-medium cursor-default'
+                    : 'text-[#7A005D] hover:underline cursor-pointer'
+                }`}
+              >
+                All variables
+              </button>
+              {breadcrumbLabels.map((label, index) => (
+                <span key={`${label}-${index}`} className="inline-flex items-center gap-1">
+                  <span className="text-gray-300" aria-hidden>
+                    ›
+                  </span>
+                  {index < breadcrumbLabels.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => goToPathDepth(index + 1)}
+                      className="border-0 bg-transparent p-0 text-[12px] text-[#7A005D] hover:underline cursor-pointer"
+                    >
+                      {label}
+                    </button>
+                  ) : (
+                    <span className="text-gray-900 font-medium">{label}</span>
+                  )}
+                </span>
+              ))}
+            </nav>
+            <div
+              className={`flex flex-1 min-h-0 divide-x divide-gray-100 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}
+            >
               <ColumnList
-                items={col1Items}
-                selectedId={col1Id}
-                highlightedId={activeCol === 1 ? highlightedId : null}
-                isKeyboardColumn={activeCol === 1}
+                items={leftItems}
+                selectedId={leftSelectedId}
+                highlightedId={activePane === 'left' ? highlightedId : null}
+                isKeyboardColumn={activePane === 'left'}
                 onRowHover={(index) => {
-                  setActiveCol(1);
-                  setActiveRowIndex(index);
+                  const node = leftItems[index];
+                  if (node) selectLeftRow(node, index);
                 }}
-                onSelect={(node) => {
-                  handleCol1(node);
-                  setActiveCol(1);
-                  setActiveRowIndex(col1Items.findIndex((n) => n.id === node.id));
+                onSelect={(node, index) => {
+                  selectLeftRow(node, index);
                 }}
+                onDrill={(node) => drillIntoNode(node.id)}
                 showChevron
-                breadcrumbPathIds={[]}
+                breadcrumbPathIds={crumbPathForLabels}
+                className={showRightColumn ? 'flex-1' : 'flex-1 w-full'}
               />
-              <ColumnList
-                items={col2Items}
-                selectedId={col2Id}
-                highlightedId={activeCol === 2 ? highlightedId : null}
-                isKeyboardColumn={activeCol === 2}
-                onRowHover={(index) => {
-                  setActiveCol(2);
-                  setActiveRowIndex(index);
-                }}
-                onSelect={(node) => {
-                  handleCol2(node);
-                  setActiveCol(2);
-                  setActiveRowIndex(col2Items.findIndex((n) => n.id === node.id));
-                }}
-                showChevron
-                breadcrumbPathIds={col1Id ? [col1Id] : []}
-              />
-              <ColumnList
-                items={col3Items}
-                selectedId={selectedLeaf?.id ?? null}
-                highlightedId={activeCol === 3 ? highlightedId : null}
-                isKeyboardColumn={activeCol === 3}
-                onRowHover={(index) => {
-                  setActiveCol(3);
-                  setActiveRowIndex(index);
-                }}
-                onSelect={(node) => {
-                  handleCol3(node);
-                  setActiveCol(3);
-                  setActiveRowIndex(col3Items.findIndex((n) => n.id === node.id));
-                }}
-                showChevron={false}
-                highlightLeaf
-              />
+              {showRightColumn && (
+                <ColumnList
+                  items={rightItems}
+                  selectedId={selectedLeaf?.id ?? null}
+                  highlightedId={activePane === 'right' ? highlightedId : null}
+                  isKeyboardColumn={activePane === 'right'}
+                  onRowHover={(index) => {
+                    const node = rightItems[index];
+                    if (node) selectRightRow(node, index);
+                  }}
+                  onSelect={(node, index) => {
+                    selectRightRow(node, index);
+                  }}
+                  showChevron={false}
+                  breadcrumbPathIds={[...pathIds, leftSelectedId].filter(Boolean) as string[]}
+                  highlightLeaf
+                  className="flex-1"
+                />
+              )}
             </div>
           </>
         )}
@@ -391,56 +441,78 @@ function ColumnList({
   isKeyboardColumn,
   onRowHover,
   onSelect,
+  onDrill,
   showChevron,
   breadcrumbPathIds = [],
   highlightLeaf,
+  className = 'flex-1',
 }: {
   items: VariableMenuNode[];
   selectedId: string | null;
   highlightedId: string | null;
   isKeyboardColumn: boolean;
   onRowHover: (index: number) => void;
-  onSelect: (node: VariableMenuNode) => void;
+  onSelect: (node: VariableMenuNode, index: number) => void;
+  onDrill?: (node: VariableMenuNode) => void;
   showChevron: boolean;
   breadcrumbPathIds?: string[];
   highlightLeaf?: boolean;
+  className?: string;
 }) {
   return (
-    <div className={`flex-1 overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
-      {items.map((node, index) => {
-        const isSelected = selectedId === node.id;
-        const isHighlighted = highlightedId === node.id;
-        const expandable = hasVariableChildren(node);
-        const rowLabel = expandable
-          ? getDropdownFolderLabel(node, breadcrumbPathIds)
-          : node.label;
-        const showPathSelected = isSelected && !isKeyboardColumn;
-        return (
-          <button
-            key={node.id}
-            type="button"
-            data-modal-highlight-id={node.id}
-            onMouseEnter={() => onRowHover(index)}
-            onClick={() => onSelect(node)}
-            className={`w-full flex items-center gap-2 px-4 py-2.5 text-left text-[14px] border-0 transition-colors ${
-              isHighlighted
-                ? 'bg-gray-100 text-gray-900 font-medium'
-                : showPathSelected && (highlightLeaf || !expandable)
-                  ? 'bg-gray-50 text-gray-900 font-medium'
-                  : showPathSelected
-                    ? 'bg-gray-50 text-gray-900'
-                    : 'bg-white text-gray-700'
-            }`}
-          >
-            <span className="flex-1 truncate">{rowLabel}</span>
-            {showChevron && expandable && (
-              <ChevronRight size={14} className="text-gray-400 shrink-0" />
-            )}
-          </button>
-        );
-      })}
+    <div className={`overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS} ${className}`}>
+      {items.length === 0 ? (
+        <div className="flex h-full min-h-[200px] items-center justify-center px-4">
+          <p className="text-[13px] text-gray-400 text-center">Select a category on the left</p>
+        </div>
+      ) : (
+        items.map((node, index) => {
+          const isSelected = selectedId === node.id;
+          const isHighlighted = highlightedId === node.id;
+          const expandable = hasVariableChildren(node);
+          const rowLabel = expandable
+            ? getDropdownFolderLabel(node, breadcrumbPathIds)
+            : node.label;
+          const showPathSelected = isSelected && !isKeyboardColumn;
+          return (
+            <button
+              key={node.id}
+              type="button"
+              data-modal-highlight-id={node.id}
+              onMouseEnter={() => onRowHover(index)}
+              onClick={() => onSelect(node, index)}
+              className={`w-full flex items-center gap-2 px-4 py-2.5 text-left text-[14px] border-0 transition-colors ${
+                isHighlighted
+                  ? 'bg-gray-100 text-gray-900 font-medium'
+                  : showPathSelected && (highlightLeaf || !expandable)
+                    ? 'bg-gray-50 text-gray-900 font-medium'
+                    : showPathSelected
+                      ? 'bg-gray-50 text-gray-900'
+                      : 'bg-white text-gray-700'
+              }`}
+            >
+              <span className="flex-1 truncate">{rowLabel}</span>
+              {showChevron && expandable && (
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={`Open ${rowLabel}`}
+                  className="p-1 -mr-1 rounded hover:bg-gray-200 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(node, index);
+                    if (hasChildren(node)) onDrill?.(node);
+                  }}
+                >
+                  <ChevronRight size={14} className="text-gray-400" />
+                </span>
+              )}
+            </button>
+          );
+        })
+      )}
     </div>
   );
-}
+};
 
 export default AddVariablesModal;

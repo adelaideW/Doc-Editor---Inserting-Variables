@@ -1,4 +1,5 @@
 import type { VariableItem } from '../VariableDropdown';
+import type { RecipientSelection } from './RecipientAssignPopover';
 
 /** Target length for ~3 lines at 280px / 11–12px type. */
 const MAX_DESCRIPTION_CHARS = 140;
@@ -6,7 +7,31 @@ const MAX_DESCRIPTION_CHARS = 140;
 export type RecipientFieldMeta = {
   recipientType: 'employee' | 'manager' | 'custom';
   fieldType?: 'text' | 'checkbox' | 'signature' | 'date-signed';
+  /** Assigned recipient label (lowercase), e.g. "legal counsel" or a person's name. */
+  assignedRoleLabel?: string;
 };
+
+export function recipientTypeFromPlaceholderId(
+  id: string
+): RecipientFieldMeta['recipientType'] | null {
+  if (id === 'employee') return 'employee';
+  if (id === 'manager') return 'manager';
+  return null;
+}
+
+export function parseRecipientFieldType(
+  value: string | null
+): RecipientFieldMeta['fieldType'] | undefined {
+  if (
+    value === 'text' ||
+    value === 'checkbox' ||
+    value === 'signature' ||
+    value === 'date-signed'
+  ) {
+    return value;
+  }
+  return undefined;
+}
 
 function truncateLabel(label: string, max = 36): string {
   const trimmed = label.trim();
@@ -36,8 +61,9 @@ function describeRecipientField(title: string, detail: string): string {
   return `${truncateLabel(title, 24)} - ${detail}`.slice(0, MAX_DESCRIPTION_CHARS).trim();
 }
 
-function recipientRolePhrase(type: RecipientFieldMeta['recipientType']): string {
-  switch (type) {
+function recipientRolePhrase(meta: RecipientFieldMeta): string {
+  if (meta.assignedRoleLabel) return meta.assignedRoleLabel;
+  switch (meta.recipientType) {
     case 'employee':
       return 'employee';
     case 'manager':
@@ -86,8 +112,79 @@ function recipientFieldDetail(
 }
 
 function recipientFieldDescription(meta: RecipientFieldMeta, label: string): string {
-  const title = `${recipientRolePhrase(meta.recipientType)} ${fieldTypePhrase(meta.fieldType, label)}`;
+  const title = `${recipientRolePhrase(meta)} ${fieldTypePhrase(meta.fieldType, label)}`;
   return describeRecipientField(title, recipientFieldDetail(meta.fieldType, meta.recipientType));
+}
+
+/** Tooltip meta from chip DOM, including assigned recipient when resolved. */
+export function getRecipientMetaFromChip(chip: HTMLElement): RecipientFieldMeta | undefined {
+  const baseType = chip.getAttribute('data-recipient-type');
+  if (baseType !== 'employee' && baseType !== 'manager' && baseType !== 'custom') {
+    return undefined;
+  }
+
+  const fieldType = parseRecipientFieldType(chip.getAttribute('data-field-type'));
+  const needsRecipient = chip.getAttribute('data-needs-recipient') === 'true';
+  const relatedId = chip.getAttribute('data-related-recipient-id');
+  const relatedLabel = chip.getAttribute('data-related-recipient')?.trim();
+
+  if (!needsRecipient && relatedId) {
+    const mapped = recipientTypeFromPlaceholderId(relatedId);
+    if (mapped) return { recipientType: mapped, fieldType };
+    if (relatedLabel) {
+      return {
+        recipientType: 'custom',
+        fieldType,
+        assignedRoleLabel: relatedLabel.toLowerCase(),
+      };
+    }
+  }
+
+  const storedRole = chip.getAttribute('data-assigned-role-label')?.trim();
+  if (storedRole) {
+    return {
+      recipientType: baseType,
+      fieldType,
+      assignedRoleLabel: storedRole.toLowerCase(),
+    };
+  }
+
+  return { recipientType: baseType, fieldType };
+}
+
+export function getChipVariableDescription(chip: HTMLElement): string | null {
+  const label = chip.getAttribute('data-variable') ?? '';
+  const meta = getRecipientMetaFromChip(chip);
+  if (meta) return getVariableDescription(label, meta);
+  const stored = chip.getAttribute('data-variable-description');
+  if (stored) return stored;
+  return label ? getVariableDescription(label) : null;
+}
+
+export function syncChipVariableDescription(chip: HTMLElement): void {
+  const description = getChipVariableDescription(chip);
+  if (description) chip.setAttribute('data-variable-description', description);
+}
+
+/** Meta after user picks a recipient in the assign popover. */
+export function getRecipientMetaForAssignment(
+  selection: RecipientSelection,
+  fieldType?: RecipientFieldMeta['fieldType']
+): RecipientFieldMeta {
+  if (selection.kind === 'placeholder') {
+    const mapped = recipientTypeFromPlaceholderId(selection.id);
+    if (mapped) return { recipientType: mapped, fieldType };
+    return {
+      recipientType: 'custom',
+      fieldType,
+      assignedRoleLabel: selection.label.trim().toLowerCase(),
+    };
+  }
+  return {
+    recipientType: 'custom',
+    fieldType,
+    assignedRoleLabel: selection.employee.name.trim().toLowerCase(),
+  };
 }
 
 /** Prototype descriptions derived from variable titles (max ~3 lines when rendered). */
