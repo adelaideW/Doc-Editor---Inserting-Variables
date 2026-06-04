@@ -85,6 +85,57 @@ function dropdownCategory(
   return { id, label, children: leavesForCategory(id, sourceLabels, targetCount) };
 }
 
+function dropdownFolder(id: string, label: string, children: VariableMenuNode[]): VariableMenuNode {
+  return { id, label, children };
+}
+
+/** Nested sub-folders for V2 modal three-layer demo (matches Rippling object graph screenshots). */
+const EMPLOYEE_PERSONAL_INFORMATION: VariableMenuNode = {
+  id: 'cat.employee-personal',
+  label: 'Employee personal information',
+  children: [
+    dropdownFolder('emp.personal.emergency-contact', 'Emergency contact phone number', [
+      leaf('emp.personal.emergency.country-code', 'Country code'),
+      leaf('emp.personal.emergency.national', 'National number'),
+      leaf('emp.personal.emergency.extension', 'Phone number extension'),
+    ]),
+    dropdownFolder('emp.personal.locale', 'Employee locale settings', [
+      leaf('emp.personal.locale.region', 'Locale region'),
+      leaf('emp.personal.locale.language', 'Profile language'),
+      leaf('emp.personal.locale.timezone', 'Work timezone'),
+    ]),
+    dropdownFolder('emp.personal.name', 'Employee name details', [
+      leaf('emp.personal.name.first', 'Legal first name'),
+      leaf('emp.personal.name.full', 'Legal full name'),
+      leaf('emp.personal.name.last', 'Legal last name'),
+      leaf('emp.personal.name.middle', 'Legal middle name'),
+    ]),
+    dropdownFolder('emp.personal.home-address', 'Home address', [
+      leaf('emp.personal.home.country', 'Country'),
+      leaf('emp.personal.home.city', 'City'),
+      leaf('emp.personal.home.country-code', 'Country code'),
+      leaf('emp.personal.home.county-code', 'County code'),
+      leaf('emp.personal.home.county-name', 'County name'),
+      leaf('emp.personal.home.full', 'Full address'),
+      leaf('emp.personal.home.state', 'State'),
+      leaf('emp.personal.home.state-code', 'State code'),
+      leaf('emp.personal.home.street', 'Street address'),
+      leaf('emp.personal.home.zip', 'Zip'),
+    ]),
+    dropdownFolder('emp.personal.phone', 'Phone number', [
+      leaf('emp.personal.phone.country-code', 'Country code'),
+      leaf('emp.personal.phone.national', 'National number'),
+      leaf('emp.personal.phone.extension', 'Phone number extension'),
+    ]),
+    leaf('emp.personal.dob', 'Date of birth'),
+    leaf('emp.personal.ssn-expected', 'Expected date for SSN'),
+    leaf('emp.personal.age', 'Age'),
+    leaf('emp.personal.gender-identified', 'Identified gender'),
+    leaf('emp.personal.sex', 'Sex'),
+    leaf('emp.personal.tshirt', 'T-shirt size'),
+  ],
+};
+
 const EMPLOYEE_LOGIN_FIELDS = [
   'Work email',
   'Username',
@@ -245,12 +296,7 @@ export const VARIABLE_DROPDOWN_TREE: VariableMenuNode[] = [
   dropdownCategory('cat.country-personal', 'Country-specific personal information', [
     'Country-specific personal inform...',
   ], 1),
-  dropdownCategory(
-    'cat.employee-personal',
-    'Employee personal information',
-    CUSTOM_DOCUMENT_EMPLOYEE.slice(0, 19),
-    19
-  ),
+  EMPLOYEE_PERSONAL_INFORMATION,
   dropdownCategory('cat.employee-login', 'Employee login details', EMPLOYEE_LOGIN_FIELDS, 7),
   dropdownCategory(
     'cat.entity-contractor',

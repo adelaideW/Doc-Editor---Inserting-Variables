@@ -27,23 +27,24 @@ interface Props {
 
 type ActivePane = 'left' | 'right';
 
-const RECIPIENT_DEMO_ROOT_ID = 'root.recipient-fields';
-const RECIPIENT_DEMO_ROLE_ID = 'recipient.employee';
+const OBJECT_ROOT_LABEL = 'Object';
 
-function isTwoColumnDemoVersion(version: InsertVersion): boolean {
-  return version === 'v2' || version === 'v2_5';
+/** Snapshot for breadcrumb navigation. */
+type NavSnapshot = {
+  pathIds: string[];
+  leftSelectedId: string | null;
+};
+
+function buildLeafBreadcrumbs(pathIds: string[], leftSelectedId: string | null): string[] {
+  const crumbs = [...getBreadcrumbLabels(pathIds)];
+  if (leftSelectedId) {
+    const node = findNodeById(VARIABLE_DROPDOWN_ROOT, leftSelectedId);
+    if (node) crumbs.push(node.label);
+  }
+  return crumbs;
 }
 
-/** Pre-drilled path for portfolio demo: layer 2 left, layer 3 right. */
-function getRecipientDemoNavigation() {
-  const pathIds = [RECIPIENT_DEMO_ROOT_ID];
-  const leftItems = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, pathIds);
-  const leftIdx = leftItems.findIndex((n) => n.id === RECIPIENT_DEMO_ROLE_ID);
-  const leftSelectedId = leftItems[leftIdx >= 0 ? leftIdx : 0]?.id ?? null;
-  return { pathIds, leftSelectedId, activeRowIndex: leftIdx >= 0 ? leftIdx : 0 };
-}
-
-const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, onInsert }) => {
+const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion: _insertVersion, onClose, onInsert }) => {
   const [search, setSearch] = useState('');
   const [pathIds, setPathIds] = useState<string[]>([]);
   const [leftSelectedId, setLeftSelectedId] = useState<string | null>(null);
@@ -55,20 +56,13 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const resetNavigation = useCallback(() => {
-    if (isTwoColumnDemoVersion(insertVersion)) {
-      const demo = getRecipientDemoNavigation();
-      setPathIds(demo.pathIds);
-      setLeftSelectedId(demo.leftSelectedId);
-      setActiveRowIndex(demo.activeRowIndex);
-    } else {
-      const first = VARIABLE_DROPDOWN_ROOT[0];
-      setPathIds([]);
-      setLeftSelectedId(first?.id ?? null);
-      setActiveRowIndex(0);
-    }
+    const first = VARIABLE_DROPDOWN_ROOT[0];
+    setPathIds([]);
+    setLeftSelectedId(first?.id ?? null);
     setSelectedLeaf(null);
     setActivePane('left');
-  }, [insertVersion]);
+    setActiveRowIndex(0);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -89,7 +83,38 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
 
   const rightItems = useMemo(() => leftSelectedNode?.children ?? [], [leftSelectedNode]);
 
-  const breadcrumbLabels = useMemo(() => getBreadcrumbLabels(pathIds), [pathIds]);
+  const breadcrumbSegments = useMemo((): NavSnapshot[] => {
+    const segments: NavSnapshot[] = [{ pathIds: [], leftSelectedId: null }];
+    if (!leftSelectedId) return segments;
+
+    if (pathIds.length === 0) {
+      segments.push({ pathIds: [], leftSelectedId });
+      return segments;
+    }
+
+    segments.push({ pathIds: [], leftSelectedId: pathIds[0] });
+    segments.push({ pathIds: [...pathIds], leftSelectedId });
+    return segments;
+  }, [pathIds, leftSelectedId]);
+
+  const breadcrumbLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (pathIds.length === 0 && leftSelectedId) {
+      const node = findNodeById(VARIABLE_DROPDOWN_ROOT, leftSelectedId);
+      if (node) labels.push(getDropdownFolderLabel(node, []));
+    } else {
+      pathIds.forEach((id, index) => {
+        const node = findNodeById(VARIABLE_DROPDOWN_ROOT, id);
+        if (!node) return;
+        labels.push(index === 0 ? getDropdownFolderLabel(node, []) : node.label);
+      });
+      if (leftSelectedId) {
+        const node = findNodeById(VARIABLE_DROPDOWN_ROOT, leftSelectedId);
+        if (node) labels.push(node.label);
+      }
+    }
+    return labels;
+  }, [pathIds, leftSelectedId]);
 
   const searchResults = useMemo(() => searchVariableItems(search), [search]);
   const isSearchMode = search.trim().length > 0;
@@ -119,83 +144,84 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
     el?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
   }, [highlightedId, activePane, activeRowIndex, isOpen]);
 
-  const crumbPathForLabels = useMemo(() => pathIds, [pathIds]);
-
-  const pickLeaf = (node: VariableMenuNode, extraPath: string[]) => {
+  const pickLeaf = (node: VariableMenuNode) => {
     if (hasChildren(node)) return;
-    const crumbs = getBreadcrumbLabels(extraPath);
+    const crumbs = buildLeafBreadcrumbs(pathIds, leftSelectedId);
     setSelectedLeaf(nodeToVariableItem(node, crumbs));
   };
 
-  const selectLeftRow = (node: VariableMenuNode, index: number) => {
+  const applySnapshot = (snapshot: NavSnapshot) => {
+    setPathIds(snapshot.pathIds);
+    const items = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, snapshot.pathIds);
+    let selectId = snapshot.leftSelectedId ?? items[0]?.id ?? null;
+    let rowIndex = 0;
+
+    if (selectId && items.some((n) => n.id === selectId)) {
+      rowIndex = items.findIndex((n) => n.id === selectId);
+    } else {
+      selectId = items[0]?.id ?? null;
+      rowIndex = 0;
+    }
+
+    setLeftSelectedId(selectId);
+    setActiveRowIndex(rowIndex);
+    setActivePane('left');
+    setSelectedLeaf(null);
+  };
+
+  /** Click in left column: change selection and refresh right pane only. */
+  const handleLeftClick = (node: VariableMenuNode, index: number) => {
     setLeftSelectedId(node.id);
     setActivePane('left');
     setActiveRowIndex(index);
     setSelectedLeaf(null);
   };
 
-  const selectRightRow = (node: VariableMenuNode, index: number) => {
+  /** Click expandable row in right column at root: enter third layer. */
+  const drillFromRightAtRoot = (node: VariableMenuNode) => {
+    const categoryId = leftSelectedId;
+    if (!categoryId) return;
+    setPathIds([categoryId]);
+    setLeftSelectedId(node.id);
+    setActivePane('left');
+    const siblings = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, [categoryId]);
+    setActiveRowIndex(Math.max(0, siblings.findIndex((n) => n.id === node.id)));
+    setSelectedLeaf(null);
+  };
+
+  /** Click in right column. */
+  const handleRightClick = (node: VariableMenuNode, index: number) => {
     setActivePane('right');
     setActiveRowIndex(index);
+
     if (!hasChildren(node)) {
-      pickLeaf(node, [...pathIds, leftSelectedId!].filter(Boolean));
-    } else {
-      setSelectedLeaf(null);
+      pickLeaf(node);
+      return;
     }
-  };
 
-  const drillIntoNode = (nodeId: string) => {
-    const node = findNodeById(VARIABLE_DROPDOWN_ROOT, nodeId);
-    if (!node || !hasChildren(node)) return;
-    const nextPath = [...pathIds, nodeId];
-    const children = node.children ?? [];
-    const firstChild = children[0];
-    setPathIds(nextPath);
-    setLeftSelectedId(firstChild?.id ?? null);
+    if (pathIds.length === 0) {
+      drillFromRightAtRoot(node);
+      return;
+    }
+
+    // Third layer: folder is already a left-column sibling — select it there.
+    setLeftSelectedId(node.id);
     setActivePane('left');
-    setActiveRowIndex(0);
+    const idx = leftItems.findIndex((n) => n.id === node.id);
+    setActiveRowIndex(idx >= 0 ? idx : 0);
     setSelectedLeaf(null);
   };
 
-  const goToPathDepth = (depth: number) => {
-    const nextPath = pathIds.slice(0, depth);
-    const items = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, nextPath);
-    let selectId = items[0]?.id ?? null;
-    let rowIndex = 0;
-
-    if (depth === 0 && isTwoColumnDemoVersion(insertVersion)) {
-      const root = VARIABLE_DROPDOWN_ROOT;
-      const recipientIdx = root.findIndex((n) => n.id === RECIPIENT_DEMO_ROOT_ID);
-      selectId = RECIPIENT_DEMO_ROOT_ID;
-      rowIndex = recipientIdx >= 0 ? recipientIdx : 0;
-    } else if (
-      isTwoColumnDemoVersion(insertVersion) &&
-      nextPath.length === 1 &&
-      nextPath[0] === RECIPIENT_DEMO_ROOT_ID
-    ) {
-      const idx = items.findIndex((n) => n.id === RECIPIENT_DEMO_ROLE_ID);
-      selectId = RECIPIENT_DEMO_ROLE_ID;
-      rowIndex = idx >= 0 ? idx : 0;
-    }
-
-    setPathIds(nextPath);
-    setLeftSelectedId(selectId);
-    setActivePane('left');
-    setActiveRowIndex(rowIndex);
-    setSelectedLeaf(null);
+  const goToBreadcrumb = (segmentIndex: number) => {
+    const snapshot = breadcrumbSegments[segmentIndex];
+    if (snapshot) applySnapshot(snapshot);
   };
 
   const goBackOneLevel = () => {
-    if (pathIds.length === 0) return;
-    const nextPath = pathIds.slice(0, -1);
-    const items = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, nextPath);
-    const parentId = pathIds[pathIds.length - 1];
-    const stillInList = items.some((n) => n.id === parentId);
-    setPathIds(nextPath);
-    setLeftSelectedId(stillInList ? parentId : items[0]?.id ?? null);
-    setActivePane('left');
-    setActiveRowIndex(Math.max(0, items.findIndex((n) => n.id === (stillInList ? parentId : items[0]?.id))));
-    setSelectedLeaf(null);
+    if (pathIds.length > 0) {
+      applySnapshot({ pathIds: [], leftSelectedId: pathIds[0] });
+      return;
+    }
   };
 
   const handleInsert = () => {
@@ -242,13 +268,12 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
         const node = (activePane === 'left' ? leftItems : rightItems)[activeRowIndex];
         if (!node) return;
         if (activePane === 'left') {
-          if (hasChildren(node)) {
-            selectLeftRow(node, activeRowIndex);
-            drillIntoNode(node.id);
-          } else if (showRightColumn) {
+          if (showRightColumn) {
             setActivePane('right');
             setActiveRowIndex(0);
           }
+        } else if (hasChildren(node)) {
+          handleRightClick(node, activeRowIndex);
         }
         return;
       }
@@ -281,16 +306,14 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
       const node = (activePane === 'left' ? leftItems : rightItems)[activeRowIndex];
       if (!node) return;
       if (activePane === 'left') {
-        if (hasChildren(node)) {
-          drillIntoNode(node.id);
-        } else {
-          selectLeftRow(node, activeRowIndex);
-        }
+        handleLeftClick(node, activeRowIndex);
       } else {
-        selectRightRow(node, activeRowIndex);
+        handleRightClick(node, activeRowIndex);
       }
     }
   };
+
+  const leftColumnActive = pathIds.length > 0;
 
   if (!isOpen) return null;
 
@@ -309,7 +332,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
       >
         <div className="flex items-center gap-4 px-5 py-4 border-b border-gray-100 shrink-0">
           <h2 id="add-variables-title" className="text-[15px] font-semibold text-gray-900 shrink-0">
-            Add variables
+            Select variable
           </h2>
           <div className="flex-1 max-w-md mx-auto relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -364,27 +387,20 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
           </div>
         ) : (
           <>
-            {isTwoColumnDemoVersion(insertVersion) && pathIds.length > 0 && (
-              <p className="px-5 py-2 text-[11px] text-gray-500 border-b border-gray-50 shrink-0 leading-snug">
-                Demo: roles on the left, field types on the right. Click{' '}
-                <span className="text-gray-700 font-medium">All variables</span> in the breadcrumb to
-                return to the top level.
-              </p>
-            )}
             <nav
-              className="px-5 py-2 text-[12px] text-gray-500 border-b border-gray-50 shrink-0 flex flex-wrap items-center gap-1"
+              className="px-5 py-2.5 text-[12px] text-gray-500 border-b border-gray-50 shrink-0 flex flex-wrap items-center gap-1"
               aria-label="Variable browser path"
             >
               <button
                 type="button"
-                onClick={() => goToPathDepth(0)}
+                onClick={() => goToBreadcrumb(0)}
                 className={`border-0 bg-transparent p-0 text-[12px] ${
-                  pathIds.length === 0
+                  breadcrumbLabels.length === 0
                     ? 'text-gray-900 font-medium cursor-default'
-                    : 'text-[#7A005D] hover:underline cursor-pointer'
+                    : 'text-gray-500 hover:text-gray-900 cursor-pointer'
                 }`}
               >
-                All variables
+                {OBJECT_ROOT_LABEL}
               </button>
               {breadcrumbLabels.map((label, index) => (
                 <span key={`${label}-${index}`} className="inline-flex items-center gap-1">
@@ -394,8 +410,8 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
                   {index < breadcrumbLabels.length - 1 ? (
                     <button
                       type="button"
-                      onClick={() => goToPathDepth(index + 1)}
-                      className="border-0 bg-transparent p-0 text-[12px] text-[#7A005D] hover:underline cursor-pointer"
+                      onClick={() => goToBreadcrumb(index + 1)}
+                      className="border-0 bg-transparent p-0 text-[12px] text-gray-500 hover:text-gray-900 cursor-pointer"
                     >
                       {label}
                     </button>
@@ -412,17 +428,11 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
                 items={leftItems}
                 selectedId={leftSelectedId}
                 highlightedId={activePane === 'left' ? highlightedId : null}
-                isKeyboardColumn={activePane === 'left'}
-                onRowHover={(index) => {
-                  const node = leftItems[index];
-                  if (node) selectLeftRow(node, index);
-                }}
-                onSelect={(node, index) => {
-                  selectLeftRow(node, index);
-                }}
-                onDrill={(node) => drillIntoNode(node.id)}
+                onSelect={handleLeftClick}
                 showChevron
-                breadcrumbPathIds={crumbPathForLabels}
+                showChevronInColumn="left"
+                folderPathIds={pathIds}
+                isActiveColumn={leftColumnActive}
                 className={showRightColumn ? 'flex-1' : 'flex-1 w-full'}
               />
               {showRightColumn && (
@@ -430,17 +440,10 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
                   items={rightItems}
                   selectedId={selectedLeaf?.id ?? null}
                   highlightedId={activePane === 'right' ? highlightedId : null}
-                  isKeyboardColumn={activePane === 'right'}
-                  onRowHover={(index) => {
-                    const node = rightItems[index];
-                    if (node) selectRightRow(node, index);
-                  }}
-                  onSelect={(node, index) => {
-                    selectRightRow(node, index);
-                  }}
-                  showChevron={false}
-                  breadcrumbPathIds={[...pathIds, leftSelectedId].filter(Boolean) as string[]}
-                  highlightLeaf
+                  onSelect={handleRightClick}
+                  showChevron
+                  showChevronInColumn="right"
+                  folderPathIds={[...pathIds, leftSelectedId].filter(Boolean) as string[]}
                   className="flex-1"
                 />
               )}
@@ -478,29 +481,29 @@ function ColumnList({
   items,
   selectedId,
   highlightedId,
-  isKeyboardColumn,
-  onRowHover,
   onSelect,
-  onDrill,
   showChevron,
-  breadcrumbPathIds = [],
-  highlightLeaf,
+  showChevronInColumn,
+  folderPathIds = [],
+  isActiveColumn,
   className = 'flex-1',
 }: {
   items: VariableMenuNode[];
   selectedId: string | null;
   highlightedId: string | null;
-  isKeyboardColumn: boolean;
-  onRowHover: (index: number) => void;
   onSelect: (node: VariableMenuNode, index: number) => void;
-  onDrill?: (node: VariableMenuNode) => void;
   showChevron: boolean;
-  breadcrumbPathIds?: string[];
-  highlightLeaf?: boolean;
+  showChevronInColumn: 'left' | 'right';
+  folderPathIds?: string[];
+  isActiveColumn?: boolean;
   className?: string;
 }) {
   return (
-    <div className={`overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS} ${className}`}>
+    <div
+      className={`overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS} ${className} ${
+        isActiveColumn ? 'border-r-2 border-blue-500' : ''
+      }`}
+    >
       {items.length === 0 ? (
         <div className="flex h-full min-h-[200px] items-center justify-center px-4">
           <p className="text-[13px] text-gray-400 text-center">Select a category on the left</p>
@@ -511,41 +514,32 @@ function ColumnList({
           const isHighlighted = highlightedId === node.id;
           const expandable = hasVariableChildren(node);
           const rowLabel = expandable
-            ? getDropdownFolderLabel(node, breadcrumbPathIds)
+            ? getDropdownFolderLabel(node, folderPathIds)
             : node.label;
-          const showPathSelected = isSelected && !isKeyboardColumn;
+          const showChevronOnRow = showChevron && expandable;
+
           return (
             <button
               key={node.id}
               type="button"
               data-modal-highlight-id={node.id}
-              onMouseEnter={() => onRowHover(index)}
               onClick={() => onSelect(node, index)}
               className={`w-full flex items-center gap-2 px-4 py-2.5 text-left text-[14px] border-0 transition-colors ${
                 isHighlighted
                   ? 'bg-gray-100 text-gray-900 font-medium'
-                  : showPathSelected && (highlightLeaf || !expandable)
-                    ? 'bg-gray-50 text-gray-900 font-medium'
-                    : showPathSelected
-                      ? 'bg-gray-50 text-gray-900'
-                      : 'bg-white text-gray-700'
+                  : isSelected
+                    ? 'bg-gray-100 text-gray-900 font-medium'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
               }`}
             >
               <span className="flex-1 truncate">{rowLabel}</span>
-              {showChevron && expandable && (
-                <span
-                  role="button"
-                  tabIndex={-1}
-                  aria-label={`Open ${rowLabel}`}
-                  className="p-1 -mr-1 rounded hover:bg-gray-200 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect(node, index);
-                    if (hasChildren(node)) onDrill?.(node);
-                  }}
-                >
-                  <ChevronRight size={14} className="text-gray-400" />
-                </span>
+              {showChevronOnRow && (
+                <ChevronRight
+                  size={14}
+                  className={`text-gray-400 shrink-0 ${
+                    showChevronInColumn === 'right' ? '' : ''
+                  }`}
+                />
               )}
             </button>
           );
@@ -553,6 +547,6 @@ function ColumnList({
       )}
     </div>
   );
-};
+}
 
 export default AddVariablesModal;
