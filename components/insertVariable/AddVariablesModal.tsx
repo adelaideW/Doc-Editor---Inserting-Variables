@@ -28,6 +28,20 @@ interface Props {
 type ActivePane = 'left' | 'right';
 
 const RECIPIENT_DEMO_ROOT_ID = 'root.recipient-fields';
+const RECIPIENT_DEMO_ROLE_ID = 'recipient.employee';
+
+function isTwoColumnDemoVersion(version: InsertVersion): boolean {
+  return version === 'v2' || version === 'v2_5';
+}
+
+/** Pre-drilled path for portfolio demo: layer 2 left, layer 3 right. */
+function getRecipientDemoNavigation() {
+  const pathIds = [RECIPIENT_DEMO_ROOT_ID];
+  const leftItems = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, pathIds);
+  const leftIdx = leftItems.findIndex((n) => n.id === RECIPIENT_DEMO_ROLE_ID);
+  const leftSelectedId = leftItems[leftIdx >= 0 ? leftIdx : 0]?.id ?? null;
+  return { pathIds, leftSelectedId, activeRowIndex: leftIdx >= 0 ? leftIdx : 0 };
+}
 
 const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, onInsert }) => {
   const [search, setSearch] = useState('');
@@ -41,17 +55,19 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const resetNavigation = useCallback(() => {
-    const leftItems = VARIABLE_DROPDOWN_ROOT;
-    const demoStart =
-      insertVersion === 'v2' || insertVersion === 'v2_5'
-        ? leftItems.find((n) => n.id === RECIPIENT_DEMO_ROOT_ID)
-        : undefined;
-    const first = demoStart ?? leftItems[0];
-    setPathIds([]);
-    setLeftSelectedId(first?.id ?? null);
+    if (isTwoColumnDemoVersion(insertVersion)) {
+      const demo = getRecipientDemoNavigation();
+      setPathIds(demo.pathIds);
+      setLeftSelectedId(demo.leftSelectedId);
+      setActiveRowIndex(demo.activeRowIndex);
+    } else {
+      const first = VARIABLE_DROPDOWN_ROOT[0];
+      setPathIds([]);
+      setLeftSelectedId(first?.id ?? null);
+      setActiveRowIndex(0);
+    }
     setSelectedLeaf(null);
     setActivePane('left');
-    setActiveRowIndex(demoStart ? leftItems.findIndex((n) => n.id === demoStart.id) : 0);
   }, [insertVersion]);
 
   useEffect(() => {
@@ -144,11 +160,28 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
   const goToPathDepth = (depth: number) => {
     const nextPath = pathIds.slice(0, depth);
     const items = getChildrenAtPath(VARIABLE_DROPDOWN_ROOT, nextPath);
-    const first = items[0];
+    let selectId = items[0]?.id ?? null;
+    let rowIndex = 0;
+
+    if (depth === 0 && isTwoColumnDemoVersion(insertVersion)) {
+      const root = VARIABLE_DROPDOWN_ROOT;
+      const recipientIdx = root.findIndex((n) => n.id === RECIPIENT_DEMO_ROOT_ID);
+      selectId = RECIPIENT_DEMO_ROOT_ID;
+      rowIndex = recipientIdx >= 0 ? recipientIdx : 0;
+    } else if (
+      isTwoColumnDemoVersion(insertVersion) &&
+      nextPath.length === 1 &&
+      nextPath[0] === RECIPIENT_DEMO_ROOT_ID
+    ) {
+      const idx = items.findIndex((n) => n.id === RECIPIENT_DEMO_ROLE_ID);
+      selectId = RECIPIENT_DEMO_ROLE_ID;
+      rowIndex = idx >= 0 ? idx : 0;
+    }
+
     setPathIds(nextPath);
-    setLeftSelectedId(first?.id ?? null);
+    setLeftSelectedId(selectId);
     setActivePane('left');
-    setActiveRowIndex(0);
+    setActiveRowIndex(rowIndex);
     setSelectedLeaf(null);
   };
 
@@ -331,6 +364,13 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion, onClose, on
           </div>
         ) : (
           <>
+            {isTwoColumnDemoVersion(insertVersion) && pathIds.length > 0 && (
+              <p className="px-5 py-2 text-[11px] text-gray-500 border-b border-gray-50 shrink-0 leading-snug">
+                Demo: roles on the left, field types on the right. Click{' '}
+                <span className="text-gray-700 font-medium">All variables</span> in the breadcrumb to
+                return to the top level.
+              </p>
+            )}
             <nav
               className="px-5 py-2 text-[12px] text-gray-500 border-b border-gray-50 shrink-0 flex flex-wrap items-center gap-1"
               aria-label="Variable browser path"
