@@ -1,5 +1,12 @@
+import type { VariableItem } from '../VariableDropdown';
+
 /** Target length for ~3 lines at 280px / 11–12px type. */
 const MAX_DESCRIPTION_CHARS = 140;
+
+export type RecipientFieldMeta = {
+  recipientType: 'employee' | 'manager' | 'custom';
+  fieldType?: 'text' | 'checkbox' | 'signature' | 'date-signed';
+};
 
 function truncateLabel(label: string, max = 36): string {
   const trimmed = label.trim();
@@ -20,8 +27,75 @@ function describe(label: string, detail: string): string {
   return `${truncateLabel(name, 24)} — ${detail}`.slice(0, MAX_DESCRIPTION_CHARS).trim();
 }
 
+/** Recipient chip tooltips: “{role} {field} - {detail}”. */
+function describeRecipientField(title: string, detail: string): string {
+  let text = `${title} - ${detail}`;
+  if (text.length <= MAX_DESCRIPTION_CHARS) return text;
+  text = `${truncateLabel(title)} - ${detail}`;
+  if (text.length <= MAX_DESCRIPTION_CHARS) return text;
+  return `${truncateLabel(title, 24)} - ${detail}`.slice(0, MAX_DESCRIPTION_CHARS).trim();
+}
+
+function recipientRolePhrase(type: RecipientFieldMeta['recipientType']): string {
+  switch (type) {
+    case 'employee':
+      return 'employee';
+    case 'manager':
+      return "employee's manager";
+    case 'custom':
+      return 'custom';
+  }
+}
+
+function fieldTypePhrase(
+  fieldType: RecipientFieldMeta['fieldType'] | undefined,
+  label: string
+): string {
+  switch (fieldType) {
+    case 'signature':
+      return 'signature';
+    case 'checkbox':
+      return 'checkbox';
+    case 'date-signed':
+      return 'date signed';
+    case 'text':
+      return 'text';
+    default:
+      return label.trim().toLowerCase() || 'field';
+  }
+}
+
+function recipientFieldDetail(
+  fieldType: RecipientFieldMeta['fieldType'] | undefined,
+  recipientType: RecipientFieldMeta['recipientType']
+): string {
+  switch (fieldType) {
+    case 'signature':
+      return 'signature captured when this recipient completes signing and is embedded in the final PDF.';
+    case 'checkbox':
+      return 'yes/no response collected from this recipient when they complete the document.';
+    case 'date-signed':
+      return 'date recorded when this recipient signs or completes their section of the document.';
+    case 'text':
+      return 'text entered by this recipient in the document body at send or signing time.';
+    default:
+      return recipientType === 'custom'
+        ? 'assign a recipient before send; value is filled when they complete the document.'
+        : 'merge field tied to this recipient role and populated when they interact with the document.';
+  }
+}
+
+function recipientFieldDescription(meta: RecipientFieldMeta, label: string): string {
+  const title = `${recipientRolePhrase(meta.recipientType)} ${fieldTypePhrase(meta.fieldType, label)}`;
+  return describeRecipientField(title, recipientFieldDetail(meta.fieldType, meta.recipientType));
+}
+
 /** Prototype descriptions derived from variable titles (max ~3 lines when rendered). */
-export function getVariableDescription(label: string): string {
+export function getVariableDescription(label: string, meta?: RecipientFieldMeta): string {
+  if (meta?.recipientType) {
+    return recipientFieldDescription(meta, label);
+  }
+
   const hay = label.toLowerCase();
 
   if (hay.includes('discriminator') || (hay.includes('variant') && hay.includes('template'))) {
@@ -78,4 +152,15 @@ export function getVariableDescription(label: string): string {
   }
 
   return describe(label, 'Rippling merge field populated from the object graph at send time.');
+}
+
+export function getVariableDescriptionForItem(item: VariableItem): string {
+  const label = item.insertLabel ?? item.label;
+  if (item.recipientType) {
+    return getVariableDescription(label, {
+      recipientType: item.recipientType,
+      fieldType: item.fieldType,
+    });
+  }
+  return getVariableDescription(label);
 }

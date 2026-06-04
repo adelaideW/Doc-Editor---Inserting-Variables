@@ -1,5 +1,5 @@
 import type { VariableItem } from '../VariableDropdown';
-import { getVariableDescription } from './variableDescriptions';
+import { getVariableDescriptionForItem } from './variableDescriptions';
 
 export const CHIP_SELECTED_CLASS = 'chip-selected';
 
@@ -13,7 +13,7 @@ export function applyChipVisualState(chip: HTMLElement, warning: boolean) {
 
 export function createVariableChip(item: VariableItem): HTMLElement {
   const label = item.insertLabel ?? item.label;
-  const description = getVariableDescription(label);
+  const description = getVariableDescriptionForItem(item);
   const chip = document.createElement('span');
   const warning = item.needsRecipient === true;
   applyChipVisualState(chip, warning);
@@ -22,6 +22,12 @@ export function createVariableChip(item: VariableItem): HTMLElement {
   chip.setAttribute('data-variable-id', item.id);
   chip.setAttribute('data-variable-path', item.path);
   chip.setAttribute('data-variable-description', description);
+  if (item.recipientType) {
+    chip.setAttribute('data-recipient-type', item.recipientType);
+  }
+  if (item.fieldType) {
+    chip.setAttribute('data-field-type', item.fieldType);
+  }
   chip.setAttribute('data-needs-recipient', warning ? 'true' : 'false');
 
   const labelSpan = document.createElement('span');

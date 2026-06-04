@@ -21,7 +21,10 @@ import {
   parseChipsFromHtml,
   syncChipSelectionHighlight,
 } from './insertVariable/insertVariableAtCaret';
-import { getVariableDescription } from './insertVariable/variableDescriptions';
+import {
+  getVariableDescription,
+  type RecipientFieldMeta,
+} from './insertVariable/variableDescriptions';
 import ObjectGraphSidePanel from './insertVariable/ObjectGraphSidePanel';
 import ObjectGraphCollapsedRail from './insertVariable/ObjectGraphCollapsedRail';
 import AddVariablesModal from './insertVariable/AddVariablesModal';
@@ -748,7 +751,24 @@ const EditorCanvas: React.FC<Props> = ({
     if (chip?.classList.contains('variable-chip')) {
       const label = chip.getAttribute('data-variable') ?? '';
       const stored = chip.getAttribute('data-variable-description');
-      const description = stored || getVariableDescription(label);
+      const recipientType = chip.getAttribute('data-recipient-type');
+      const fieldType = chip.getAttribute('data-field-type');
+      const recipientMeta: RecipientFieldMeta | undefined =
+        recipientType === 'employee' ||
+        recipientType === 'manager' ||
+        recipientType === 'custom'
+          ? {
+              recipientType,
+              fieldType:
+                fieldType === 'text' ||
+                fieldType === 'checkbox' ||
+                fieldType === 'signature' ||
+                fieldType === 'date-signed'
+                  ? fieldType
+                  : undefined,
+            }
+          : undefined;
+      const description = stored || getVariableDescription(label, recipientMeta);
       if (description) {
         setChipRouteTooltip({ description, rect: chip.getBoundingClientRect() });
         return;
