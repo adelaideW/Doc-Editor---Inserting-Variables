@@ -5,6 +5,7 @@ import VariableDropdown, {
   type VariableItem,
 } from '../VariableDropdown';
 import type { CombinedSearchItem } from './combinedMenuSearch';
+import { VARIABLE_LIST_MAX_HEIGHT_CLASS } from './variableListLayout';
 import {
   IMPORT_ROW,
   INSERT_VARIABLES_ROW,
@@ -81,7 +82,7 @@ const CombinedInsertMenu: React.FC<Props> = ({
               “{searchQuery}”
             </span>
           </div>
-          <div className="flex flex-col py-1 overflow-y-auto max-h-[min(460px,calc(100vh-220px))]">
+          <div className={`flex flex-col py-1 overflow-y-auto ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
             {searchResults.length > 0 ? (
               searchResults.map((row, index) => {
                 const active = index === searchActiveIndex;

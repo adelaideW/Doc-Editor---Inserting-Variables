@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Search, X } from 'lucide-react';
-import { VARIABLE_TREE, type VariableMenuNode } from '../variablesCatalog';
+import {
+  VARIABLE_DROPDOWN_TREE,
+  countLeafNodes,
+  hasVariableChildren,
+  type VariableMenuNode,
+} from '../variablesCatalog';
+import { VARIABLE_LIST_MAX_HEIGHT_CLASS } from './variableListLayout';
 import type { VariableItem } from '../VariableDropdown';
 import {
   getBreadcrumbLabels,
@@ -31,7 +37,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
   useEffect(() => {
     if (!isOpen) return;
     setSearch('');
-    const first = VARIABLE_TREE[0];
+    const first = VARIABLE_DROPDOWN_TREE[0];
     setCol1Id(first?.id ?? null);
     const firstChild = first?.children?.[0];
     setCol2Id(firstChild?.id ?? null);
@@ -41,7 +47,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
     requestAnimationFrame(() => dialogRef.current?.focus());
   }, [isOpen]);
 
-  const col1Items = VARIABLE_TREE;
+  const col1Items = VARIABLE_DROPDOWN_TREE;
   const col2Items = useMemo(() => {
     if (!col1Id) return [];
     const node = col1Items.find((n) => n.id === col1Id);
@@ -262,7 +268,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
         </div>
 
         {isSearchMode ? (
-          <div className="flex-1 min-h-0 overflow-y-auto py-2">
+          <div className={`flex-1 min-h-0 overflow-y-auto py-2 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
             {searchResults.length > 0 ? (
               searchResults.map((item, index) => (
                 <button
@@ -294,7 +300,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
                 {breadcrumbs.join(' › ')}
               </div>
             )}
-            <div className="flex flex-1 min-h-[320px] divide-x divide-gray-100">
+            <div className={`flex flex-1 min-h-0 divide-x divide-gray-100 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
               <ColumnList
                 items={col1Items}
                 selectedId={col1Id}
@@ -310,6 +316,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, onClose, onInsert }) => {
                   setActiveRowIndex(col1Items.findIndex((n) => n.id === node.id));
                 }}
                 showChevron
+                showCategoryCounts
               />
               <ColumnList
                 items={col2Items}
@@ -382,6 +389,7 @@ function ColumnList({
   onRowHover,
   onSelect,
   showChevron,
+  showCategoryCounts,
   highlightLeaf,
 }: {
   items: VariableMenuNode[];
@@ -391,14 +399,19 @@ function ColumnList({
   onRowHover: (index: number) => void;
   onSelect: (node: VariableMenuNode) => void;
   showChevron: boolean;
+  showCategoryCounts?: boolean;
   highlightLeaf?: boolean;
 }) {
   return (
-    <div className="flex-1 overflow-y-auto min-w-0">
+    <div className={`flex-1 overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
       {items.map((node, index) => {
         const isSelected = selectedId === node.id;
         const isHighlighted = highlightedId === node.id;
-        const expandable = hasChildren(node);
+        const expandable = hasVariableChildren(node);
+        const rowLabel =
+          showCategoryCounts && expandable
+            ? `${node.label} (${countLeafNodes(node)})`
+            : node.label;
         const showPathSelected = isSelected && !isKeyboardColumn;
         return (
           <button
@@ -417,7 +430,7 @@ function ColumnList({
                     : 'bg-white text-gray-700'
             }`}
           >
-            <span className="flex-1 truncate">{node.label}</span>
+            <span className="flex-1 truncate">{rowLabel}</span>
             {showChevron && expandable && (
               <ChevronRight size={14} className="text-gray-400 shrink-0" />
             )}

@@ -1,4 +1,4 @@
-import { VARIABLE_TREE, type VariableMenuNode } from '../variablesCatalog';
+import { VARIABLE_DROPDOWN_TREE, type VariableMenuNode } from '../variablesCatalog';
 import type { VariableItem } from '../VariableDropdown';
 
 type LeafWithPath = { node: VariableMenuNode; breadcrumbs: string[] };
@@ -37,7 +37,7 @@ function toVariableItemFromNode(n: VariableMenuNode, breadcrumbs: string[]): Var
 
 const ALL_FLATTENED = (() => {
   const acc: LeafWithPath[] = [];
-  flattenAll(VARIABLE_TREE, [], acc);
+  flattenAll(VARIABLE_DROPDOWN_TREE, [], acc);
   return acc;
 })();
 

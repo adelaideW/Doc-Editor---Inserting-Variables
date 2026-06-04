@@ -1,7 +1,12 @@
 
 import React, { useMemo, useEffect, useState, forwardRef, useImperativeHandle, useCallback, useRef } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
-import { VARIABLE_TREE, type VariableMenuNode } from './variablesCatalog';
+import {
+  VARIABLE_DROPDOWN_TREE,
+  countLeafNodes,
+  type VariableMenuNode,
+} from './variablesCatalog';
+import { VARIABLE_LIST_MAX_HEIGHT_CLASS } from './insertVariable/variableListLayout';
 
 export type { VariableMenuNode };
 
@@ -18,6 +23,8 @@ export interface VariableItem {
   recipientType?: 'employee' | 'manager' | 'custom';
   fieldType?: 'text' | 'checkbox' | 'signature' | 'date-signed';
   needsRecipient?: boolean;
+  /** Shown at root as “Label (n)” for category folders. */
+  childCount?: number;
 }
 
 type LeafWithPath = { node: VariableMenuNode; breadcrumbs: string[] };
@@ -107,7 +114,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
 
     const allNodes = useMemo(() => {
       const acc: LeafWithPath[] = [];
-      flattenAll(VARIABLE_TREE, [], acc);
+      flattenAll(VARIABLE_DROPDOWN_TREE, [], acc);
       return acc;
     }, []);
 
@@ -129,8 +136,14 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
           }));
       }
 
-      const level = getChildrenAtPath(VARIABLE_TREE, menuPathIds);
-      return level.map((n) => toVariableItemFromNode(n, []));
+      const level = getChildrenAtPath(VARIABLE_DROPDOWN_TREE, menuPathIds);
+      return level.map((n) => {
+        const item = toVariableItemFromNode(n, []);
+        if (menuPathIds.length === 0 && item.hasChildren) {
+          return { ...item, childCount: countLeafNodes(n) };
+        }
+        return item;
+      });
     }, [searchQuery, menuPathIds, allNodes]);
 
     const activeIndexRef = useRef(activeIndex);
@@ -204,7 +217,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
     const breadcrumbTrail = useMemo(() => {
       if (!menuPathIds.length || searchQuery.trim()) return [];
       const labels: string[] = [];
-      let level = VARIABLE_TREE;
+      let level = VARIABLE_DROPDOWN_TREE;
       for (const id of menuPathIds) {
         const node = level.find((n) => n.id === id);
         if (!node) break;
@@ -213,6 +226,9 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
       }
       return labels;
     }, [menuPathIds, searchQuery]);
+
+    const rowLabel = (item: VariableItem) =>
+      item.childCount != null ? `${item.label} (${item.childCount})` : item.label;
 
     const goBack = () => {
       setMenuPathIds((prev) => prev.slice(0, -1));
@@ -245,11 +261,7 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
           </div>
         )}
 
-        <div
-          className={`flex flex-col py-2 overflow-y-auto ${
-            embedded ? 'max-h-[240px]' : 'max-h-[min(460px,calc(100vh-220px))]'
-          }`}
-        >
+        <div className={`flex flex-col py-1 overflow-y-auto ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
           {filteredItems.length > 0 ? (
             filteredItems.map((item, index) => {
               const isFocused = showFocusHighlight && index === activeIndex;
@@ -260,13 +272,13 @@ const VariableDropdown = forwardRef<VariableDropdownHandle, VariableDropdownProp
                   key={`${searchQuery}:${item.id}`}
                   onMouseEnter={() => onRowHover?.(index)}
                   onClick={() => handleItemClick(item)}
-                  className={`flex items-center gap-3 px-4 py-3 text-[14px] transition-colors cursor-pointer group text-left w-full border-0 bg-transparent rounded-none font-inherit ${
+                  className={`flex items-center gap-3 px-4 py-2.5 text-[14px] transition-colors cursor-pointer group text-left w-full border-0 bg-transparent rounded-none font-inherit ${
                     isFocused
                       ? 'bg-[#7A005D]/5 text-[#7A005D]'
-                      : 'text-gray-700 hover:bg-gray-50'
+                      : 'text-gray-900 hover:bg-gray-50'
                   }`}
                 >
-                  <span className={`flex-1 truncate ${isFocused ? 'font-medium' : ''}`}>{item.label}</span>
+                  <span className={`flex-1 truncate ${isFocused ? 'font-medium' : ''}`}>{rowLabel(item)}</span>
                   {expandable ? (
                     <ChevronRight
                       size={14}

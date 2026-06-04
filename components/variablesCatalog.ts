@@ -57,6 +57,151 @@ function slug(label: string, i: number) {
   return `${s || 'field'}-${i}`;
 }
 
+export function hasVariableChildren(n: VariableMenuNode): boolean {
+  return !!n.children && n.children.length > 0;
+}
+
+export function countLeafNodes(node: VariableMenuNode): number {
+  if (!hasVariableChildren(node)) return 1;
+  return node.children!.reduce((sum, child) => sum + countLeafNodes(child), 0);
+}
+
+function leavesForCategory(categoryId: string, labels: string[], targetCount: number): VariableMenuNode[] {
+  const names = [...labels];
+  let filler = 1;
+  while (names.length < targetCount) {
+    names.push(`Demo placeholder ${filler}`);
+    filler += 1;
+  }
+  return names.slice(0, targetCount).map((label, i) => leaf(`${categoryId}.f-${slug(label, i)}`, label));
+}
+
+function dropdownCategory(
+  id: string,
+  label: string,
+  sourceLabels: string[],
+  targetCount: number
+): VariableMenuNode {
+  return { id, label, children: leavesForCategory(id, sourceLabels, targetCount) };
+}
+
+const EMPLOYEE_LOGIN_FIELDS = [
+  'Work email',
+  'Username',
+  'Last login at',
+  'MFA enabled',
+  'Auth provider',
+  'Account status',
+  'Password last changed',
+];
+
+const COMPENSATION_FIELDS = [
+  'Annual base salary',
+  'Pay currency',
+  'Pay frequency',
+  'Bonus target percent',
+  'Equity grant shares',
+  'Commission plan code',
+  'Overtime eligibility',
+  'FLSA exemption status',
+  'Compensation band min',
+  'Compensation band max',
+  'Compensation band midpoint',
+  'Localized pay currency',
+  'Discretionary bonus plan',
+  'Signing bonus amount',
+  'Relocation bonus',
+  'Stock option grant date',
+  'Vesting schedule label',
+  'Cliff months',
+  'Total compensation estimate',
+  'Hourly rate',
+  'Weekly hours',
+  'Pay grade',
+  'Cost center allocation',
+  'Pay group',
+  'Payroll schedule',
+  'Last compensation change date',
+  'Compensation effective date',
+  'Prior base salary',
+  'Compa-ratio',
+  'Geographic pay differential',
+  'Shift differential',
+  'On-call stipend',
+  'Car allowance',
+  'Phone stipend',
+  'Commission draw',
+  'Draw recovery balance',
+  'Incentive plan year',
+];
+
+const EMPLOYMENT_STATUS_FIELDS = [
+  'Employment type',
+  'Active status',
+  'Termination date',
+  'Termination reason',
+  'Rehire eligibility',
+  'Leave status',
+  'Leave start date',
+  'Leave end date',
+  'Probation end date',
+  'Notice period days',
+  'Worker classification',
+  'Union membership',
+  'Visa status',
+  'Work authorization expiry',
+  'Background check status',
+  'I-9 verification status',
+];
+
+/**
+ * Root categories for inline / modal variable dropdowns (V3-style Rippling object graph).
+ * Counts match demo targets; gaps filled with placeholders when the catalog has fewer labels.
+ */
+export const VARIABLE_DROPDOWN_TREE: VariableMenuNode[] = [
+  dropdownCategory('cat.country-personal', 'Country-specific personal information', [
+    'Country-specific personal inform...',
+  ], 1),
+  dropdownCategory(
+    'cat.employee-personal',
+    'Employee personal information',
+    CUSTOM_DOCUMENT_EMPLOYEE.slice(0, 19),
+    19
+  ),
+  dropdownCategory('cat.employee-login', 'Employee login details', EMPLOYEE_LOGIN_FIELDS, 7),
+  dropdownCategory(
+    'cat.entity-contractor',
+    'Entity contractor details',
+    CUSTOM_DOCUMENT_CONSULTANT,
+    13
+  ),
+  dropdownCategory(
+    'cat.employment-info',
+    'Employment information',
+    [
+      ...CUSTOM_DOCUMENT_EMPLOYEE,
+      ...EMPLOYEE_RECIPIENT_FIELD_GROUPS,
+      'Start Date',
+      'Manager Name',
+      'Manager title',
+      'Standard weekly hours',
+      'Work location name',
+      'Duties',
+      'department',
+      'Title',
+    ],
+    47
+  ),
+  dropdownCategory('cat.employee-contractor', 'Employee contractor details', ['Employee contractor details'], 1),
+  dropdownCategory('cat.country-employment', 'Country-specific employment information', [
+    'Country-specific employment inf...',
+  ], 1),
+  dropdownCategory('cat.compensation', 'Compensation', COMPENSATION_FIELDS, 36),
+  dropdownCategory('cat.employment-status', 'Employment status', EMPLOYMENT_STATUS_FIELDS, 16),
+  dropdownCategory('cat.recruiting', 'Recruiting', ['Recruiting requisition ID'], 1),
+  dropdownCategory('cat.third-party', 'Third Party Apps', ['Third Party Apps', 'Connected app name'], 2),
+];
+
 /** Original “Rippling recipient” employee sub-groups (each chip used the visible label text). */
 const EMPLOYEE_RECIPIENT_FIELD_GROUPS = [
   'Employee details',

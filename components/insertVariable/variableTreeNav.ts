@@ -1,4 +1,4 @@
-import { VARIABLE_TREE, type VariableMenuNode } from '../variablesCatalog';
+import { VARIABLE_DROPDOWN_TREE, VARIABLE_TREE, type VariableMenuNode } from '../variablesCatalog';
 import type { VariableItem } from '../VariableDropdown';
 
 export function hasChildren(n: VariableMenuNode): boolean {
@@ -27,9 +27,12 @@ export function findNodeById(root: VariableMenuNode[], id: string): VariableMenu
   return null;
 }
 
-export function getBreadcrumbLabels(pathIds: string[]): string[] {
+export function getBreadcrumbLabels(
+  pathIds: string[],
+  root: VariableMenuNode[] = VARIABLE_DROPDOWN_TREE
+): string[] {
   const labels: string[] = [];
-  let level = VARIABLE_TREE;
+  let level = root;
   for (const id of pathIds) {
     const node = level.find((n) => n.id === id);
     if (!node) break;
