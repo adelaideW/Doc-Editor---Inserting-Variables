@@ -313,8 +313,6 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion: _insertVers
     }
   };
 
-  const leftColumnActive = pathIds.length > 0;
-
   if (!isOpen) return null;
 
   return (
@@ -432,7 +430,6 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion: _insertVers
                 showChevron
                 showChevronInColumn="left"
                 folderPathIds={pathIds}
-                isActiveColumn={leftColumnActive}
                 className={showRightColumn ? 'flex-1' : 'flex-1 w-full'}
               />
               {showRightColumn && (
@@ -485,7 +482,6 @@ function ColumnList({
   showChevron,
   showChevronInColumn,
   folderPathIds = [],
-  isActiveColumn,
   className = 'flex-1',
 }: {
   items: VariableMenuNode[];
@@ -495,15 +491,10 @@ function ColumnList({
   showChevron: boolean;
   showChevronInColumn: 'left' | 'right';
   folderPathIds?: string[];
-  isActiveColumn?: boolean;
   className?: string;
 }) {
   return (
-    <div
-      className={`overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS} ${className} ${
-        isActiveColumn ? 'border-r-2 border-blue-500' : ''
-      }`}
-    >
+    <div className={`overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS} ${className}`}>
       {items.length === 0 ? (
         <div className="flex h-full min-h-[200px] items-center justify-center px-4">
           <p className="text-[13px] text-gray-400 text-center">Select a category on the left</p>
