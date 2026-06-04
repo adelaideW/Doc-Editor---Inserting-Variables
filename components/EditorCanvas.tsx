@@ -27,7 +27,7 @@ import ObjectGraphCollapsedRail from './insertVariable/ObjectGraphCollapsedRail'
 import AddVariablesModal from './insertVariable/AddVariablesModal';
 import SlashBlockMenu, {
   SLASH_BLOCK_ROWS,
-  SLASH_MENU_ROWS,
+  V2_5_SLASH_MENU_ROWS,
   type SlashMenuItemId,
 } from './insertVariable/SlashBlockMenu';
 import CombinedInsertMenu, { type CombinedMenuView } from './insertVariable/CombinedInsertMenu';
@@ -265,9 +265,7 @@ const EditorCanvas: React.FC<Props> = ({
     [applyChipVisualState, closeRecipientPicker, notifyChange]
   );
 
-  const INSERT_MENU_WIDTH_PX = 280;
-
-  const computeCaretAnchor = useCallback((menuMaxWidth = 620) => {
+  const computeCaretAnchor = useCallback(() => {
     const sel = window.getSelection();
     const ed = editorRef.current;
     if (!sel?.rangeCount || !ed) return { top: 0, left: 8 };
@@ -299,6 +297,7 @@ const EditorCanvas: React.FC<Props> = ({
 
     const LINE_ESTIMATE = 22;
     const CARET_GAP = 12;
+    const DROPDOWN_MAX_W = 620;
     let topPx: number;
     let leftPx: number;
 
@@ -315,7 +314,7 @@ const EditorCanvas: React.FC<Props> = ({
     }
 
     const pad = 8;
-    leftPx = Math.max(pad, Math.min(leftPx, window.innerWidth - menuMaxWidth - pad));
+    leftPx = Math.max(pad, Math.min(leftPx, window.innerWidth - DROPDOWN_MAX_W - pad));
 
     return { top: topPx, left: leftPx };
   }, []);
@@ -326,9 +325,7 @@ const EditorCanvas: React.FC<Props> = ({
   }, [computeCaretAnchor]);
 
   const updateInsertMenuPosition = useCallback(() => {
-    const anchor = computeCaretAnchor(
-      usesCombinedInsertMenu(insertVersion) ? INSERT_MENU_WIDTH_PX : 620
-    );
+    const anchor = computeCaretAnchor();
     if (usesCombinedInsertMenu(insertVersion)) {
       setSlashMenuPos(anchor);
     } else {
@@ -352,7 +349,7 @@ const EditorCanvas: React.FC<Props> = ({
     setActiveIndex(0);
     emptyBackspaceCountRef.current = 0;
     if (usesCombinedInsertMenu(insertVersion)) {
-      setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
+      setSlashMenuPos(computeCaretAnchor());
       setShowSlashMenu(true);
       setCombinedMenuView('variablesDrillIn');
     } else {
@@ -394,7 +391,7 @@ const EditorCanvas: React.FC<Props> = ({
     if (insertVersion === 'v3_5') {
       breakoutTextRef.current = null;
       emptyBackspaceCountRef.current = 0;
-      setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
+      setSlashMenuPos(computeCaretAnchor());
       setShowSlashMenu(true);
       setCombinedMenuView('root');
       setSearchQuery('');
@@ -512,14 +509,14 @@ const EditorCanvas: React.FC<Props> = ({
 
   const openSlashMenuAtCaret = useCallback(() => {
     removeSlashBeforeCaret();
-    setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
+    setSlashMenuPos(computeCaretAnchor());
     setShowSlashMenu(true);
     setSlashActiveIndex(0);
   }, [computeCaretAnchor, removeSlashBeforeCaret]);
 
   const openCombinedMenuAtCaret = useCallback(() => {
     removeSlashBeforeCaret();
-    setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
+    setSlashMenuPos(computeCaretAnchor());
     setShowSlashMenu(true);
     setCombinedMenuView('root');
     setSearchQuery('');
@@ -1147,7 +1144,7 @@ const EditorCanvas: React.FC<Props> = ({
     }
 
     if (showSlashMenu && insertVersion === 'v2_5') {
-      const menuLen = SLASH_MENU_ROWS.length;
+      const menuLen = V2_5_SLASH_MENU_ROWS.length;
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSlashActiveIndex((prev) => (prev + 1) % menuLen);
@@ -1160,7 +1157,7 @@ const EditorCanvas: React.FC<Props> = ({
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const row = SLASH_MENU_ROWS[slashActiveIndex];
+        const row = V2_5_SLASH_MENU_ROWS[slashActiveIndex];
         if (row) handleSlashSelect(row.id);
         return;
       }
@@ -1332,6 +1329,7 @@ const EditorCanvas: React.FC<Props> = ({
             top={slashMenuPos.top}
             left={slashMenuPos.left}
             activeIndex={slashActiveIndex}
+            rows={V2_5_SLASH_MENU_ROWS}
             onSelect={handleSlashSelect}
             onHover={setSlashActiveIndex}
           />

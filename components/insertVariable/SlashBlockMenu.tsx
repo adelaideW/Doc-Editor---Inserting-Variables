@@ -67,22 +67,33 @@ export const WRITE_WITH_AI_ROW: MenuRow = {
 export const INSERT_VARIABLES_ROW = SLASH_MENU_ROWS[0];
 export const IMPORT_ROW = SLASH_MENU_ROWS[1];
 
+/** V2.5 slash menu: insert variables only (opens Add Variables modal). */
+export const V2_5_SLASH_MENU_ROWS: MenuRow[] = [INSERT_VARIABLES_ROW];
+
 interface Props {
   top: number;
   left: number;
   activeIndex: number;
+  rows?: MenuRow[];
   onSelect: (id: SlashMenuItemId) => void;
   onHover: (index: number) => void;
 }
 
-const SlashBlockMenu: React.FC<Props> = ({ top, left, activeIndex, onSelect, onHover }) => {
+const SlashBlockMenu: React.FC<Props> = ({
+  top,
+  left,
+  activeIndex,
+  rows = SLASH_MENU_ROWS,
+  onSelect,
+  onHover,
+}) => {
   return (
     <div
       className="fixed z-[1050] w-[280px] bg-white border border-gray-200 rounded-lg shadow-[0_12px_40px_rgba(0,0,0,0.12)] overflow-hidden py-1"
       style={{ top, left }}
       onMouseDown={(e) => e.preventDefault()}
     >
-      {SLASH_MENU_ROWS.map((row, index) => {
+      {rows.map((row, index) => {
         const active = index === activeIndex;
         return (
           <button
