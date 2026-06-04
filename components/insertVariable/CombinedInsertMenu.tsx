@@ -65,7 +65,7 @@ const CombinedInsertMenu: React.FC<Props> = ({
 
   return (
     <div
-      className="fixed z-[1050] w-[min(100vw-32px,620px)] min-w-[280px] bg-white border border-gray-200 rounded-lg shadow-[0_12px_40px_rgba(0,0,0,0.12)] overflow-hidden flex flex-col"
+      className="fixed z-[1050] w-[280px] bg-white border border-gray-200 rounded-lg shadow-[0_12px_40px_rgba(0,0,0,0.12)] overflow-hidden flex flex-col"
       style={{ top, left }}
       onMouseDown={(e) => e.preventDefault()}
     >

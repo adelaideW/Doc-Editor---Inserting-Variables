@@ -265,7 +265,9 @@ const EditorCanvas: React.FC<Props> = ({
     [applyChipVisualState, closeRecipientPicker, notifyChange]
   );
 
-  const computeCaretAnchor = useCallback(() => {
+  const INSERT_MENU_WIDTH_PX = 280;
+
+  const computeCaretAnchor = useCallback((menuMaxWidth = 620) => {
     const sel = window.getSelection();
     const ed = editorRef.current;
     if (!sel?.rangeCount || !ed) return { top: 0, left: 8 };
@@ -297,7 +299,6 @@ const EditorCanvas: React.FC<Props> = ({
 
     const LINE_ESTIMATE = 22;
     const CARET_GAP = 12;
-    const DROPDOWN_MAX_W = 620;
     let topPx: number;
     let leftPx: number;
 
@@ -314,7 +315,7 @@ const EditorCanvas: React.FC<Props> = ({
     }
 
     const pad = 8;
-    leftPx = Math.max(pad, Math.min(leftPx, window.innerWidth - DROPDOWN_MAX_W - pad));
+    leftPx = Math.max(pad, Math.min(leftPx, window.innerWidth - menuMaxWidth - pad));
 
     return { top: topPx, left: leftPx };
   }, []);
@@ -325,7 +326,9 @@ const EditorCanvas: React.FC<Props> = ({
   }, [computeCaretAnchor]);
 
   const updateInsertMenuPosition = useCallback(() => {
-    const anchor = computeCaretAnchor();
+    const anchor = computeCaretAnchor(
+      usesCombinedInsertMenu(insertVersion) ? INSERT_MENU_WIDTH_PX : 620
+    );
     if (usesCombinedInsertMenu(insertVersion)) {
       setSlashMenuPos(anchor);
     } else {
@@ -349,7 +352,7 @@ const EditorCanvas: React.FC<Props> = ({
     setActiveIndex(0);
     emptyBackspaceCountRef.current = 0;
     if (usesCombinedInsertMenu(insertVersion)) {
-      setSlashMenuPos(computeCaretAnchor());
+      setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
       setShowSlashMenu(true);
       setCombinedMenuView('variablesDrillIn');
     } else {
@@ -391,7 +394,7 @@ const EditorCanvas: React.FC<Props> = ({
     if (insertVersion === 'v3_5') {
       breakoutTextRef.current = null;
       emptyBackspaceCountRef.current = 0;
-      setSlashMenuPos(computeCaretAnchor());
+      setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
       setShowSlashMenu(true);
       setCombinedMenuView('root');
       setSearchQuery('');
@@ -509,14 +512,14 @@ const EditorCanvas: React.FC<Props> = ({
 
   const openSlashMenuAtCaret = useCallback(() => {
     removeSlashBeforeCaret();
-    setSlashMenuPos(computeCaretAnchor());
+    setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
     setShowSlashMenu(true);
     setSlashActiveIndex(0);
   }, [computeCaretAnchor, removeSlashBeforeCaret]);
 
   const openCombinedMenuAtCaret = useCallback(() => {
     removeSlashBeforeCaret();
-    setSlashMenuPos(computeCaretAnchor());
+    setSlashMenuPos(computeCaretAnchor(INSERT_MENU_WIDTH_PX));
     setShowSlashMenu(true);
     setCombinedMenuView('root');
     setSearchQuery('');
