@@ -1,14 +1,34 @@
+export type VariableFieldKind = 'folder' | 'text' | 'date' | 'boolean' | 'list' | 'currency' | 'number';
+
 export type VariableMenuNode = {
   id: string;
   label: string;
   children?: VariableMenuNode[];
   searchKeywords?: string[];
+  fieldKind?: VariableFieldKind;
   recipientType?: 'employee' | 'manager' | 'custom';
   fieldType?: 'text' | 'checkbox' | 'signature' | 'date-signed';
   needsRecipient?: boolean;
 };
 
-const leaf = (id: string, label: string): VariableMenuNode => ({ id, label });
+const leaf = (id: string, label: string, fieldKind: VariableFieldKind = 'text'): VariableMenuNode => ({
+  id,
+  label,
+  fieldKind,
+});
+
+const addressLeaves = (prefix: string): VariableMenuNode[] => [
+  leaf(`${prefix}.country`, 'Country', 'list'),
+  leaf(`${prefix}.city`, 'City'),
+  leaf(`${prefix}.country-code`, 'Country code'),
+  leaf(`${prefix}.county-code`, 'County code'),
+  leaf(`${prefix}.county-name`, 'County name'),
+  leaf(`${prefix}.full`, 'Full address'),
+  leaf(`${prefix}.state`, 'State'),
+  leaf(`${prefix}.state-code`, 'State code'),
+  leaf(`${prefix}.street`, 'Street address'),
+  leaf(`${prefix}.zip`, 'Zip'),
+];
 
 const recipientFieldLeaves = (
   prefix: string,
@@ -86,8 +106,104 @@ function dropdownCategory(
 }
 
 function dropdownFolder(id: string, label: string, children: VariableMenuNode[]): VariableMenuNode {
-  return { id, label, children };
+  return { id, label, fieldKind: 'folder', children };
 }
+
+/** Country-specific personal information — mirror folder + address groups (screenshots). */
+const COUNTRY_SPECIFIC_PERSONAL_INFORMATION: VariableMenuNode = {
+  id: 'cat.country-personal',
+  label: 'Country-specific personal information',
+  children: [
+    dropdownFolder('country.personal.root', 'Country-specific personal information', [
+      dropdownFolder('country.personal.emergency-address', 'Emergency address', addressLeaves('country.personal.emergency')),
+      dropdownFolder('country.personal.mailing-address', 'Mailing address', addressLeaves('country.personal.mailing')),
+      dropdownFolder('country.personal.registered-address', 'Registered address', addressLeaves('country.personal.registered')),
+      leaf('country.personal.emergency-notification', 'Emergency contact notification', 'boolean'),
+      leaf('country.personal.citizenship', 'Has citizenship in country of employment', 'boolean'),
+      leaf('country.personal.pin', 'Whether EE has PIN number', 'boolean'),
+      leaf('country.personal.blood', 'Blood group', 'list'),
+      leaf('country.personal.citizenship-pk', 'Country of citizenship (Pakistan)', 'list'),
+      leaf('country.personal.disability', 'Disability status', 'list'),
+      leaf('country.personal.race', 'Race', 'list'),
+      leaf('country.personal.emergency-relationship', 'Relationship with emergency contact'),
+    ]),
+  ],
+};
+
+const EMPLOYEE_LOGIN_DETAILS: VariableMenuNode = {
+  id: 'cat.employee-login',
+  label: 'Employee login details',
+  children: [
+    leaf('login.date-joined', 'Date joined Rippling', 'date'),
+    leaf('login.last-password-change', 'Last password change date', 'date'),
+    leaf('login.last-password-reset', 'Last password reset date', 'date'),
+    leaf('login.blocked', 'Login blocked', 'boolean'),
+    leaf('login.password-compromised', 'Password is compromised', 'boolean'),
+    leaf('login.phone-verified', 'Phone number verified', 'boolean'),
+    dropdownFolder('login.last-sign-in', 'Last sign in details', [
+      leaf('login.sign-in.ip', 'Sign-in IP address'),
+      leaf('login.sign-in.device', 'Sign-in device'),
+      leaf('login.sign-in.timestamp', 'Sign-in timestamp', 'date'),
+    ]),
+  ],
+};
+
+const ENTITY_CONTRACTOR_DETAILS: VariableMenuNode = {
+  id: 'cat.entity-contractor',
+  label: 'Entity contractor details',
+  children: [
+    leaf('entity.contractor.is-entity', 'Is contractor an entity?', 'boolean'),
+    leaf('entity.contractor.single-member-llc', 'Is the LLC is owned by a single member?', 'boolean'),
+    leaf('entity.contractor.missing-ein', 'Missing EIN', 'boolean'),
+    leaf('entity.contractor.tax-location', 'Contractor tax location type', 'list'),
+    leaf('entity.contractor.tax-type', 'Entity contractor tax type', 'list'),
+    leaf('entity.contractor.type', 'Entity contractor type', 'list'),
+    leaf('entity.contractor.tin-type', 'Tax payer identification number (TIN) type', 'list'),
+    leaf('entity.contractor.ein', 'EIN'),
+    leaf('entity.contractor.business-name', 'Entity contractor business name'),
+    leaf('entity.contractor.legal-name', 'Entity contractor legal name'),
+    leaf('entity.contractor.ftin', 'Foreign taxpayer identification number (FTIN)'),
+    leaf('entity.contractor.project', '1099 Contractor Project Description'),
+    leaf('entity.contractor.compensation', '1099 Contractor Compensation Description'),
+  ],
+};
+
+const COMPENSATION: VariableMenuNode = {
+  id: 'cat.compensation',
+  label: 'Compensation',
+  children: [
+    leaf('comp.eor-equity', 'Do you want to add EOR Equity Services for this employee?', 'boolean'),
+    leaf('comp.bonus-schedule', 'Bonus schedule', 'list'),
+    leaf('comp.currency', 'Compensation currency', 'list'),
+    leaf('comp.time-period', 'Compensation time period', 'list'),
+    leaf('comp.commission-freq', 'On-target commission payment frequency', 'list'),
+    leaf('comp.payment-type', 'Payment type', 'list'),
+    leaf('comp.target-bonus-freq', 'Target annual bonus payment frequency', 'list'),
+    leaf('comp.equity-type', 'Type of equity', 'list'),
+    leaf('comp.payment-terms', 'Payment terms'),
+    leaf('comp.equity-type-other', 'Type of equity other'),
+    leaf('comp.annual-base', 'Annual base compensation', 'currency'),
+    dropdownFolder('comp.equity-vesting', 'Equity vesting schedule', [
+      dropdownFolder('comp.equity-package', 'Equity vesting package', [
+        leaf('comp.vesting.cliff-months', 'Cliff months', 'number'),
+        leaf('comp.vesting.total-months', 'Total vesting months', 'number'),
+        leaf('comp.vesting.total-years', 'Total vesting years', 'number'),
+        leaf('comp.vesting.type', 'Vesting type', 'list'),
+      ]),
+      leaf('comp.vesting.effective-salary', 'Effective from salary date', 'date'),
+      leaf('comp.vesting.grant-date', 'Equity grant date', 'date'),
+      leaf('comp.vesting.bonus-days', 'Bonus payment days', 'number'),
+      leaf('comp.vesting.share-count', 'Offer letter share count', 'number'),
+      leaf('comp.vesting.target-bonus-pct', 'Target annual bonus percent', 'number'),
+    ]),
+  ],
+};
+
+const EMPLOYEE_CONTRACTOR_DETAILS: VariableMenuNode = {
+  id: 'cat.employee-contractor',
+  label: 'Employee contractor details',
+  children: [leaf('emp.contractor.sole-prop', 'Sole proprietor name')],
+};
 
 /** Nested sub-folders for V2 modal three-layer demo (matches Rippling object graph screenshots). */
 const EMPLOYEE_PERSONAL_INFORMATION: VariableMenuNode = {
@@ -127,12 +243,12 @@ const EMPLOYEE_PERSONAL_INFORMATION: VariableMenuNode = {
       leaf('emp.personal.phone.national', 'National number'),
       leaf('emp.personal.phone.extension', 'Phone number extension'),
     ]),
-    leaf('emp.personal.dob', 'Date of birth'),
-    leaf('emp.personal.ssn-expected', 'Expected date for SSN'),
-    leaf('emp.personal.age', 'Age'),
-    leaf('emp.personal.gender-identified', 'Identified gender'),
-    leaf('emp.personal.sex', 'Sex'),
-    leaf('emp.personal.tshirt', 'T-shirt size'),
+    leaf('emp.personal.dob', 'Date of birth', 'date'),
+    leaf('emp.personal.ssn-expected', 'Expected date for SSN', 'date'),
+    leaf('emp.personal.age', 'Age', 'number'),
+    leaf('emp.personal.gender-identified', 'Identified gender', 'list'),
+    leaf('emp.personal.sex', 'Sex', 'list'),
+    leaf('emp.personal.tshirt', 'T-shirt size', 'list'),
   ],
 };
 
@@ -293,17 +409,10 @@ const CUSTOM_DOCUMENT_EMPLOYEE = [
  * Counts match demo targets; gaps filled with placeholders when the catalog has fewer labels.
  */
 export const VARIABLE_DROPDOWN_TREE: VariableMenuNode[] = [
-  dropdownCategory('cat.country-personal', 'Country-specific personal information', [
-    'Country-specific personal inform...',
-  ], 1),
+  COUNTRY_SPECIFIC_PERSONAL_INFORMATION,
   EMPLOYEE_PERSONAL_INFORMATION,
-  dropdownCategory('cat.employee-login', 'Employee login details', EMPLOYEE_LOGIN_FIELDS, 7),
-  dropdownCategory(
-    'cat.entity-contractor',
-    'Entity contractor details',
-    CUSTOM_DOCUMENT_CONSULTANT,
-    13
-  ),
+  EMPLOYEE_LOGIN_DETAILS,
+  ENTITY_CONTRACTOR_DETAILS,
   dropdownCategory(
     'cat.employment-info',
     'Employment information',
@@ -321,11 +430,11 @@ export const VARIABLE_DROPDOWN_TREE: VariableMenuNode[] = [
     ],
     47
   ),
-  dropdownCategory('cat.employee-contractor', 'Employee contractor details', ['Employee contractor details'], 1),
+  EMPLOYEE_CONTRACTOR_DETAILS,
   dropdownCategory('cat.country-employment', 'Country-specific employment information', [
     'Country-specific employment inf...',
   ], 1),
-  dropdownCategory('cat.compensation', 'Compensation', COMPENSATION_FIELDS, 36),
+  COMPENSATION,
   dropdownCategory('cat.employment-status', 'Employment status', EMPLOYMENT_STATUS_FIELDS, 16),
   dropdownCategory('cat.recruiting', 'Recruiting', ['Recruiting requisition ID'], 1),
   dropdownCategory('cat.third-party', 'Third Party Apps', ['Third Party Apps', 'Connected app name'], 2),

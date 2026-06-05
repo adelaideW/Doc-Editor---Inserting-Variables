@@ -6,7 +6,7 @@ import {
   hasVariableChildren,
   type VariableMenuNode,
 } from '../variablesCatalog';
-import { VARIABLE_LIST_MAX_HEIGHT_CLASS } from './variableListLayout';
+import { ModalFieldIcon } from './modalFieldIcon';
 import type { InsertVersion } from '../insertVersions';
 import type { VariableItem } from '../VariableDropdown';
 import {
@@ -116,8 +116,14 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion: _insertVers
     return labels;
   }, [pathIds, leftSelectedId]);
 
+  const searchQuery = search.trim();
   const searchResults = useMemo(() => searchVariableItems(search), [search]);
-  const isSearchMode = search.trim().length > 0;
+  const isSearchMode = searchQuery.length > 0;
+  const searchResultsLabel = useMemo(() => {
+    const count = searchResults.length;
+    const noun = count === 1 ? 'result' : 'results';
+    return `${count} ${noun} for “${searchQuery}”`;
+  }, [searchResults.length, searchQuery]);
   const showRightColumn = !isSearchMode && rightItems.length > 0;
 
   const activeListItems = useMemo((): VariableMenuNode[] | VariableItem[] => {
@@ -357,34 +363,40 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion: _insertVers
           </button>
         </div>
 
-        {isSearchMode ? (
-          <div className={`flex-1 min-h-0 overflow-y-auto py-2 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}>
-            {searchResults.length > 0 ? (
-              searchResults.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  data-modal-highlight-id={item.id}
-                  className={`w-full text-left px-5 py-3 text-[14px] border-0 bg-transparent transition-colors ${
-                    index === activeRowIndex ? 'bg-gray-100 font-medium' : 'bg-white'
-                  }`}
-                  onMouseEnter={() => setActiveRowIndex(index)}
-                  onClick={() => {
-                    setActiveRowIndex(index);
-                    setSelectedLeaf(item);
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))
-            ) : (
-              <div className="flex h-full min-h-[320px] items-center justify-center">
-                <p className="text-[13px] text-gray-400">No matching variables</p>
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {isSearchMode ? (
+            <>
+              <p className="shrink-0 px-5 py-2.5 text-[12px] text-gray-500 border-b border-gray-50">
+                {searchResultsLabel}
+              </p>
+              <div className="flex-1 min-h-0 overflow-y-auto py-2">
+                {searchResults.length > 0 ? (
+                  searchResults.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      data-modal-highlight-id={item.id}
+                      className={`w-full text-left px-5 py-3 text-[14px] border-0 bg-transparent transition-colors ${
+                        index === activeRowIndex ? 'bg-gray-100 font-medium' : 'bg-white hover:bg-gray-50'
+                      }`}
+                      onMouseEnter={() => setActiveRowIndex(index)}
+                      onClick={() => {
+                        setActiveRowIndex(index);
+                        setSelectedLeaf(item);
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))
+                ) : (
+                  <div className="flex min-h-[200px] items-center justify-center px-5">
+                    <p className="text-[13px] text-gray-400">No matching variables</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ) : (
-          <>
+            </>
+          ) : (
+            <>
             <nav
               className="px-5 py-2.5 text-[12px] text-gray-500 border-b border-gray-50 shrink-0 flex flex-wrap items-center gap-1"
               aria-label="Variable browser path"
@@ -419,9 +431,7 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion: _insertVers
                 </span>
               ))}
             </nav>
-            <div
-              className={`flex flex-1 min-h-0 divide-x divide-gray-100 ${VARIABLE_LIST_MAX_HEIGHT_CLASS}`}
-            >
+            <div className="flex flex-1 min-h-0 divide-x divide-gray-100">
               <ColumnList
                 items={leftItems}
                 selectedId={leftSelectedId}
@@ -446,9 +456,10 @@ const AddVariablesModal: React.FC<Props> = ({ isOpen, insertVersion: _insertVers
               )}
             </div>
           </>
-        )}
+          )}
+        </div>
 
-        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100 shrink-0 bg-white">
           <button
             type="button"
             onClick={onClose}
@@ -494,7 +505,7 @@ function ColumnList({
   className?: string;
 }) {
   return (
-    <div className={`overflow-y-auto min-w-0 ${VARIABLE_LIST_MAX_HEIGHT_CLASS} ${className}`}>
+    <div className={`overflow-y-auto min-h-0 min-w-0 ${className}`}>
       {items.length === 0 ? (
         <div className="flex h-full min-h-[200px] items-center justify-center px-4">
           <p className="text-[13px] text-gray-400 text-center">Select a category on the left</p>
@@ -523,6 +534,7 @@ function ColumnList({
                     : 'bg-white text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <ModalFieldIcon node={node} />
               <span className="flex-1 truncate">{rowLabel}</span>
               {showChevronOnRow && (
                 <ChevronRight

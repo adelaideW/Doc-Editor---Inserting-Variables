@@ -138,7 +138,7 @@ export function searchVariableItems(query: string): VariableItem[] {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return [];
 
-  return flattenAllLeaves()
+  return flattenAllLeaves(VARIABLE_DROPDOWN_ROOT)
     .map(({ node, breadcrumbs }) => nodeToVariableItem(node, breadcrumbs))
     .filter((item) => tokens.every((token) => item.searchText.includes(token)))
     .map((item) => ({

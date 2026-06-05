@@ -7,11 +7,12 @@ function hasChildren(n: VariableMenuNode): boolean {
   return !!n.children && n.children.length > 0;
 }
 
-function flattenAll(nodes: VariableMenuNode[], breadcrumbs: string[] = [], acc: LeafWithPath[]): void {
+function flattenLeaves(nodes: VariableMenuNode[], breadcrumbs: string[] = [], acc: LeafWithPath[]): void {
   for (const n of nodes) {
-    acc.push({ node: n, breadcrumbs });
     if (hasChildren(n)) {
-      flattenAll(n.children!, [...breadcrumbs, n.label], acc);
+      flattenLeaves(n.children!, [...breadcrumbs, n.label], acc);
+    } else {
+      acc.push({ node: n, breadcrumbs });
     }
   }
 }
@@ -37,7 +38,7 @@ function toVariableItemFromNode(n: VariableMenuNode, breadcrumbs: string[]): Var
 
 const ALL_FLATTENED = (() => {
   const acc: LeafWithPath[] = [];
-  flattenAll(VARIABLE_DROPDOWN_ROOT, [], acc);
+  flattenLeaves(VARIABLE_DROPDOWN_ROOT, [], acc);
   return acc;
 })();
 
