@@ -13,6 +13,7 @@ const SAVE_DEBOUNCE_MS = 1200;
 const App: React.FC = () => {
   const [docTitle, setDocTitle] = useState("Untitled template 09/16/2025 12:27 PM");
   const [insertVariableTrigger, setInsertVariableTrigger] = useState(0);
+  const [recipientFieldsTrigger, setRecipientFieldsTrigger] = useState(0);
   const [insertVersion, setInsertVersion] = useState<InsertVersion>(DEFAULT_INSERT_VERSION);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
@@ -20,6 +21,10 @@ const App: React.FC = () => {
 
   const handleInsertVariable = () => {
     setInsertVariableTrigger((prev) => prev + 1);
+  };
+
+  const handleRecipientFields = () => {
+    setRecipientFieldsTrigger((prev) => prev + 1);
   };
 
   const notifyDocumentChange = useCallback(() => {
@@ -45,6 +50,7 @@ const App: React.FC = () => {
             title={docTitle}
             setTitle={setDocTitle}
             onInsertVariable={handleInsertVariable}
+            onRecipientFields={handleRecipientFields}
             insertVersion={insertVersion}
             saveStatus={saveStatus}
             onTitleChange={notifyDocumentChange}
@@ -53,6 +59,7 @@ const App: React.FC = () => {
 
           <EditorCanvas
             insertTrigger={insertVariableTrigger}
+            recipientFieldsTrigger={recipientFieldsTrigger}
             insertVersion={insertVersion}
             importModalOpen={importModalOpen}
             onImportModalOpenChange={setImportModalOpen}

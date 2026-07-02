@@ -5,8 +5,10 @@ import VariableDropdown, { VariableItem, VariableDropdownHandle } from './Variab
 import {
   usesAddVariablesModal,
   usesCombinedInsertMenu,
+  usesConsolidatedRecipientNav,
   usesRecipientChipPicker,
   usesSidePanel,
+  showsRecipientFieldsSidePanel,
   type InsertVersion,
 } from './insertVersions';
 import {
@@ -50,6 +52,16 @@ import { offerLetterDemoHtml } from './insertVariable/offerLetterDemoHtml';
 import RecipientAssignPopover, {
   type RecipientSelection,
 } from './insertVariable/RecipientAssignPopover';
+import RecipientFieldsSidePanel from './insertVariable/RecipientFieldsSidePanel';
+import RecipientFieldsTabRail from './insertVariable/RecipientFieldsTabRail';
+import {
+  buildRecipientFieldItem,
+  parseRecipientFieldLabel,
+  RECIPIENT_FIELD_MIME,
+  RECIPIENT_FIELD_RID_MIME,
+  type RecipientFieldLabel,
+  type RecipientPanelView,
+} from './insertVariable/recipientFieldsData';
 import {
   codeSnippetHtml,
   linkHtml,
@@ -60,6 +72,7 @@ import { collectUsedVariableIds } from './insertVariable/collectUsedVariableIds'
 
 interface Props {
   insertTrigger?: number;
+  recipientFieldsTrigger?: number;
   insertVersion: InsertVersion;
   importModalOpen?: boolean;
   onImportModalOpenChange?: (open: boolean) => void;
@@ -90,6 +103,7 @@ const EMPLOYEE_DIRECTORY: EmployeeRecord[] = Array.from({ length: 40 }, (_, i) =
 
 const EditorCanvas: React.FC<Props> = ({
   insertTrigger,
+  recipientFieldsTrigger,
   insertVersion,
   importModalOpen = false,
   onImportModalOpenChange,
@@ -102,6 +116,8 @@ const EditorCanvas: React.FC<Props> = ({
   const [aiPrompt, setAiPrompt] = useState("");
 
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [recipientPanelOpen, setRecipientPanelOpen] = useState(false);
+  const [recipientPanelView, setRecipientPanelView] = useState<RecipientPanelView>('fields');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -501,6 +517,94 @@ const EditorCanvas: React.FC<Props> = ({
       });
     },
     [refreshUsedVariables, insertVersion, notifyChange]
+  );
+
+  const handleRecipientFieldInsert = useCallback(
+    (fieldLabel: RecipientFieldLabel, recipientId: string) => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      ed.focus();
+      const item = buildRecipientFieldItem(fieldLabel, recipientId);
+      insertVariableAtCaret({
+        editorEl: ed,
+        item: augmentItemForInsert(item, insertVersion),
+        onInserted: () => {
+          setIsEmpty(false);
+          refreshUsedVariables();
+          notifyChange();
+        },
+      });
+    },
+    [insertVersion, notifyChange, refreshUsedVariables]
+  );
+
+  const openRecipientPanelView = useCallback((view: RecipientPanelView) => {
+    setRecipientPanelOpen(true);
+    setRecipientPanelView(view);
+  }, []);
+
+  useEffect(() => {
+    if (!recipientFieldsTrigger) return;
+    if (!showsRecipientFieldsSidePanel(insertVersion)) return;
+    setRecipientPanelView('fields');
+    setRecipientPanelOpen(true);
+  }, [recipientFieldsTrigger, insertVersion]);
+
+  useEffect(() => {
+    if (!showsRecipientFieldsSidePanel(insertVersion)) {
+      setRecipientPanelOpen(false);
+    }
+  }, [insertVersion]);
+
+  const handleEditorDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!showsRecipientFieldsSidePanel(insertVersion)) return;
+      const fieldLabelRaw = e.dataTransfer.getData(RECIPIENT_FIELD_MIME);
+      const recipientId = e.dataTransfer.getData(RECIPIENT_FIELD_RID_MIME) || 'employee';
+      const fieldLabel = parseRecipientFieldLabel(fieldLabelRaw);
+      if (!fieldLabel) return;
+
+      e.preventDefault();
+      const ed = editorRef.current;
+      if (!ed) return;
+
+      let range: Range | null = null;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      } else if ((document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null }).caretPositionFromPoint) {
+        const pos = (document as Document & { caretPositionFromPoint: (x: number, y: number) => { offsetNode: Node; offset: number } | null }).caretPositionFromPoint(e.clientX, e.clientY);
+        if (pos) {
+          range = document.createRange();
+          range.setStart(pos.offsetNode, pos.offset);
+          range.collapse(true);
+        }
+      }
+      if (!range || !ed.contains(range.commonAncestorContainer)) {
+        range = document.createRange();
+        range.selectNodeContents(ed);
+        range.collapse(false);
+      }
+
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      handleRecipientFieldInsert(fieldLabel, recipientId);
+    },
+    [handleRecipientFieldInsert, insertVersion]
+  );
+
+  const handleEditorDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!showsRecipientFieldsSidePanel(insertVersion)) return;
+      if (e.dataTransfer.types.includes(RECIPIENT_FIELD_MIME)) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    },
+    [insertVersion]
   );
 
   const removeSlashBeforeCaret = useCallback(() => {
@@ -1277,6 +1381,7 @@ const EditorCanvas: React.FC<Props> = ({
         />
       )}
 
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto bg-[#F8F9FA] p-12 flex justify-center relative scroll-smooth">
         <div
           ref={pageRef}
@@ -1293,6 +1398,8 @@ const EditorCanvas: React.FC<Props> = ({
           onMouseMove={handleEditorMouseMove}
           onMouseLeave={handleEditorMouseLeave}
           onKeyDown={handleKeyDown}
+          onDrop={handleEditorDrop}
+          onDragOver={handleEditorDragOver}
           className="w-full min-h-[800px] outline-none border-none text-[16px] leading-[1.6] text-[#1A1A1A] font-normal whitespace-pre-wrap selection:bg-[#7A005D]/40 selection:text-[#7A005D]"
           style={{ cursor: 'text' }}
           spellCheck={false}
@@ -1453,6 +1560,29 @@ const EditorCanvas: React.FC<Props> = ({
         </div>
         )}
       </div>
+      </div>
+
+      {showsRecipientFieldsSidePanel(insertVersion) && recipientPanelOpen && (
+        <RecipientFieldsSidePanel
+          isOpen={recipientPanelOpen}
+          layout={usesConsolidatedRecipientNav(insertVersion) ? 'tabs-left-consolidated' : 'tabs-right'}
+          view={recipientPanelView}
+          onViewChange={setRecipientPanelView}
+          onClose={() => setRecipientPanelOpen(false)}
+          onInsertField={handleRecipientFieldInsert}
+          onOpenVariables={() => setAddModalOpen(true)}
+          employees={EMPLOYEE_DIRECTORY}
+        />
+      )}
+
+      {showsRecipientFieldsSidePanel(insertVersion) &&
+        !usesConsolidatedRecipientNav(insertVersion) && (
+          <RecipientFieldsTabRail
+            panelOpen={recipientPanelOpen}
+            view={recipientPanelView}
+            onOpenView={openRecipientPanelView}
+          />
+        )}
       </div>
 
       <div className="fixed right-0 top-1/2 -translate-y-1/2 flex items-center bg-white border border-gray-200 shadow-sm px-1 py-4 rounded-l-md cursor-pointer hover:bg-gray-50 z-20 group transition-all">

@@ -41,3 +41,11 @@ export function showsRecipientFieldsHeaderButton(version: InsertVersion): boolea
 export function usesRecipientChipPicker(version: InsertVersion): boolean {
   return version === 'v2_5' || version === 'ideal' || version === 'v3_5';
 }
+
+export function showsRecipientFieldsSidePanel(version: InsertVersion): boolean {
+  return version === 'v1' || version === 'v1_5' || version === 'v2' || version === 'v2_5';
+}
+
+export function usesConsolidatedRecipientNav(version: InsertVersion): boolean {
+  return version === 'v2';
+}

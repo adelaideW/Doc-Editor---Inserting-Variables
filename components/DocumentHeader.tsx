@@ -10,6 +10,7 @@ interface Props {
   title: string;
   setTitle: (t: string) => void;
   onInsertVariable: () => void;
+  onRecipientFields?: () => void;
   insertVersion: InsertVersion;
   saveStatus: SaveStatus;
   onTitleChange?: () => void;
@@ -19,6 +20,7 @@ const DocumentHeader: React.FC<Props> = ({
   title,
   setTitle,
   onInsertVariable,
+  onRecipientFields,
   insertVersion,
   saveStatus,
   onTitleChange,
@@ -47,6 +49,7 @@ const DocumentHeader: React.FC<Props> = ({
         {showRecipientFields && (
           <button
             type="button"
+            onClick={onRecipientFields}
             className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
           >
             <Users size={14} className="text-gray-400" />
