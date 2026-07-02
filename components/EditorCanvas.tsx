@@ -5,7 +5,7 @@ import VariableDropdown, { VariableItem, VariableDropdownHandle } from './Variab
 import {
   usesAddVariablesModal,
   usesCombinedInsertMenu,
-  usesConsolidatedRecipientNav,
+  usesConsolidatedLeftPanel,
   usesRecipientChipPicker,
   usesSidePanel,
   showsRecipientFieldsSidePanel,
@@ -30,7 +30,7 @@ import {
   syncChipVariableDescription,
 } from './insertVariable/variableDescriptions';
 import ObjectGraphSidePanel from './insertVariable/ObjectGraphSidePanel';
-import ObjectGraphCollapsedRail from './insertVariable/ObjectGraphCollapsedRail';
+import LeftPanelNavRail, { type LeftPanelTab } from './insertVariable/LeftPanelNavRail';
 import AddVariablesModal from './insertVariable/AddVariablesModal';
 import SlashBlockMenu, {
   SLASH_BLOCK_ROWS,
@@ -116,6 +116,7 @@ const EditorCanvas: React.FC<Props> = ({
   const [aiPrompt, setAiPrompt] = useState("");
 
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>('variables');
   const [recipientPanelOpen, setRecipientPanelOpen] = useState(false);
   const [recipientPanelView, setRecipientPanelView] = useState<RecipientPanelView>('fields');
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -438,6 +439,7 @@ const EditorCanvas: React.FC<Props> = ({
     }
 
     if (insertVersion === 'v1_5') {
+      setLeftPanelTab('variables');
       setSidePanelOpen(true);
       return;
     }
@@ -546,6 +548,11 @@ const EditorCanvas: React.FC<Props> = ({
   useEffect(() => {
     if (!recipientFieldsTrigger) return;
     if (!showsRecipientFieldsSidePanel(insertVersion)) return;
+    if (usesConsolidatedLeftPanel(insertVersion)) {
+      setLeftPanelTab('fields');
+      setSidePanelOpen(true);
+      return;
+    }
     setRecipientPanelView('fields');
     setRecipientPanelOpen(true);
   }, [recipientFieldsTrigger, insertVersion]);
@@ -553,6 +560,9 @@ const EditorCanvas: React.FC<Props> = ({
   useEffect(() => {
     if (!showsRecipientFieldsSidePanel(insertVersion)) {
       setRecipientPanelOpen(false);
+    }
+    if (!usesConsolidatedLeftPanel(insertVersion)) {
+      setLeftPanelTab('variables');
     }
   }, [insertVersion]);
 
@@ -1363,21 +1373,50 @@ const EditorCanvas: React.FC<Props> = ({
 
   return (
     <div className="flex flex-1 min-h-0 w-full overflow-hidden">
-      {insertVersion === 'v1_5' && (
-        <ObjectGraphCollapsedRail
+      {usesConsolidatedLeftPanel(insertVersion) && (
+        <LeftPanelNavRail
           panelOpen={sidePanelOpen}
-          onToggle={() => setSidePanelOpen((open) => !open)}
+          activeTab={leftPanelTab}
+          onSelectTab={(tab) => {
+            setLeftPanelTab(tab);
+            setSidePanelOpen(true);
+          }}
         />
       )}
 
-      {usesSidePanel(insertVersion) && sidePanelOpen && (
+      {usesConsolidatedLeftPanel(insertVersion) && sidePanelOpen && leftPanelTab === 'variables' && (
         <ObjectGraphSidePanel
           isOpen={sidePanelOpen}
           onClose={() => setSidePanelOpen(false)}
           onInsert={handleSharedInsert}
-          variant={insertVersion === 'v1_5' ? 'object-graph' : 'available-data'}
+          variant="object-graph"
           usedVariableIds={usedVariableIds}
-          closeVariant={insertVersion === 'v1_5' ? 'collapse' : 'close'}
+          closeVariant="collapse"
+        />
+      )}
+
+      {usesConsolidatedLeftPanel(insertVersion) &&
+        sidePanelOpen &&
+        leftPanelTab !== 'variables' && (
+          <RecipientFieldsSidePanel
+            isOpen={sidePanelOpen}
+            view={leftPanelTab}
+            onViewChange={setLeftPanelTab}
+            onClose={() => setSidePanelOpen(false)}
+            onInsertField={handleRecipientFieldInsert}
+            employees={EMPLOYEE_DIRECTORY}
+            edge="left"
+          />
+        )}
+
+      {usesSidePanel(insertVersion) && !usesConsolidatedLeftPanel(insertVersion) && sidePanelOpen && (
+        <ObjectGraphSidePanel
+          isOpen={sidePanelOpen}
+          onClose={() => setSidePanelOpen(false)}
+          onInsert={handleSharedInsert}
+          variant="available-data"
+          usedVariableIds={usedVariableIds}
+          closeVariant="close"
         />
       )}
 
@@ -1562,21 +1601,22 @@ const EditorCanvas: React.FC<Props> = ({
       </div>
       </div>
 
-      {showsRecipientFieldsSidePanel(insertVersion) && recipientPanelOpen && (
+      {showsRecipientFieldsSidePanel(insertVersion) &&
+        !usesConsolidatedLeftPanel(insertVersion) &&
+        recipientPanelOpen && (
         <RecipientFieldsSidePanel
           isOpen={recipientPanelOpen}
-          layout={usesConsolidatedRecipientNav(insertVersion) ? 'tabs-left-consolidated' : 'tabs-right'}
           view={recipientPanelView}
           onViewChange={setRecipientPanelView}
           onClose={() => setRecipientPanelOpen(false)}
           onInsertField={handleRecipientFieldInsert}
-          onOpenVariables={() => setAddModalOpen(true)}
           employees={EMPLOYEE_DIRECTORY}
+          edge="right"
         />
       )}
 
       {showsRecipientFieldsSidePanel(insertVersion) &&
-        !usesConsolidatedRecipientNav(insertVersion) && (
+        !usesConsolidatedLeftPanel(insertVersion) && (
           <RecipientFieldsTabRail
             panelOpen={recipientPanelOpen}
             view={recipientPanelView}

@@ -46,6 +46,7 @@ export function showsRecipientFieldsSidePanel(version: InsertVersion): boolean {
   return version === 'v1' || version === 'v1_5' || version === 'v2' || version === 'v2_5';
 }
 
-export function usesConsolidatedRecipientNav(version: InsertVersion): boolean {
-  return version === 'v2';
+/** V1.5 — variables + recipient panels share one left rail and panel slot. */
+export function usesConsolidatedLeftPanel(version: InsertVersion): boolean {
+  return version === 'v1_5';
 }

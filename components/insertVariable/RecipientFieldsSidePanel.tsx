@@ -3,7 +3,6 @@ import {
   Calendar,
   Check,
   ChevronDown,
-  Grid,
   GripVertical,
   PenTool,
   Pencil,
@@ -13,7 +12,6 @@ import {
   Type,
   User,
   UserPlus,
-  Variable,
   X,
 } from 'lucide-react';
 import type { EmployeeRecord } from './RecipientAssignPopover';
@@ -28,32 +26,27 @@ import {
   toneForRecipient,
 } from './recipientFieldsData';
 
-export type RecipientFieldsLayout = 'tabs-right' | 'tabs-left-consolidated';
-
-type ConsolidatedNavId = 'variables' | RecipientPanelView;
-
 interface Props {
   isOpen: boolean;
-  layout: RecipientFieldsLayout;
   view: RecipientPanelView;
   onViewChange: (view: RecipientPanelView) => void;
   onClose: () => void;
   onInsertField: (fieldLabel: RecipientFieldLabel, recipientId: string) => void;
-  onOpenVariables?: () => void;
   employees: EmployeeRecord[];
+  /** Panel attaches to the left (V1.5) or right (V1/V2/V2.5) edge of the editor. */
+  edge?: 'left' | 'right';
 }
 
 const FIELD_ICONS = [Type, SquareCheck, PenTool, Calendar];
 
 const RecipientFieldsSidePanel: React.FC<Props> = ({
   isOpen,
-  layout,
   view,
   onViewChange,
   onClose,
   onInsertField,
-  onOpenVariables,
   employees,
+  edge = 'right',
 }) => {
   const [recipients, setRecipients] = useState<RecipientEntry[]>(DEFAULT_RECIPIENTS);
   const [activeRecipientId, setActiveRecipientId] = useState('employee');
@@ -162,21 +155,9 @@ const RecipientFieldsSidePanel: React.FC<Props> = ({
     setPlaceholderModalOpen(true);
   };
 
-  const consolidatedNav: { id: ConsolidatedNavId; label: string; icon: React.ReactNode }[] = [
-    { id: 'variables', label: 'Variables', icon: <Variable size={18} /> },
-    { id: 'fields', label: 'Recipient fields', icon: <Grid size={18} /> },
-    { id: 'recipients', label: 'Recipients', icon: <User size={18} /> },
-  ];
-
-  const handleConsolidatedNav = (id: ConsolidatedNavId) => {
-    if (id === 'variables') {
-      onOpenVariables?.();
-      return;
-    }
-    onViewChange(id);
-  };
-
   if (!isOpen) return null;
+
+  const edgeBorder = edge === 'left' ? 'border-r' : 'border-l';
 
   const panelBody = (
     <>
@@ -462,42 +443,8 @@ const RecipientFieldsSidePanel: React.FC<Props> = ({
     </>
   );
 
-  if (layout === 'tabs-left-consolidated') {
-    return (
-      <div className="flex shrink-0 min-h-0 h-full border-l border-gray-200">
-        <nav
-          className="w-[52px] bg-[#fafafa] border-r border-gray-200 flex flex-col items-center py-4 gap-2 shrink-0"
-          aria-label="Editor panels"
-        >
-          {consolidatedNav.map(({ id, label, icon }) => {
-            const isActive = id !== 'variables' && view === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleConsolidatedNav(id)}
-                title={label}
-                className={`p-2 rounded-lg transition-colors border ${
-                  id === 'variables'
-                    ? 'border-gray-200 text-gray-500 hover:bg-white hover:text-gray-700 bg-white'
-                    : isActive
-                      ? 'border-[#7A005D]/20 bg-[#7A005D]/5 text-[#7A005D]'
-                      : 'border-transparent text-gray-500 hover:bg-white hover:border-gray-200'
-                }`}
-                aria-pressed={id === 'variables' ? undefined : isActive}
-              >
-                {icon}
-              </button>
-            );
-          })}
-        </nav>
-        <aside className="w-80 bg-white flex flex-col shrink-0 min-h-0">{panelBody}</aside>
-      </div>
-    );
-  }
-
   return (
-    <aside className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 min-h-0">
+    <aside className={`w-80 bg-white ${edgeBorder} border-gray-200 flex flex-col shrink-0 min-h-0`}>
       {panelBody}
     </aside>
   );
