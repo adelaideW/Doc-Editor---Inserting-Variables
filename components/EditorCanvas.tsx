@@ -1391,7 +1391,6 @@ const EditorCanvas: React.FC<Props> = ({
           onInsert={handleSharedInsert}
           variant="object-graph"
           usedVariableIds={usedVariableIds}
-          closeVariant="collapse"
         />
       )}
 
@@ -1416,7 +1415,6 @@ const EditorCanvas: React.FC<Props> = ({
           onInsert={handleSharedInsert}
           variant="available-data"
           usedVariableIds={usedVariableIds}
-          closeVariant="close"
         />
       )}
 

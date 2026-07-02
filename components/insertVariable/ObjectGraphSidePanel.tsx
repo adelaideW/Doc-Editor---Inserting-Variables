@@ -3,7 +3,6 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   Clock,
@@ -40,7 +39,6 @@ interface Props {
   onInsert: (item: VariableItem) => void;
   variant?: ObjectGraphPanelVariant;
   usedVariableIds?: Set<string>;
-  closeVariant?: 'close' | 'collapse';
 }
 
 type PanelFilterId = 'all' | 'favorites' | 'in-use' | 'legacy';
@@ -422,7 +420,6 @@ const ObjectGraphSidePanel: React.FC<Props> = ({
   onInsert,
   variant = 'available-data',
   usedVariableIds = new Set(),
-  closeVariant = 'close',
 }) => {
   const isBrowse = variant === 'object-graph';
   const [search, setSearch] = useState('');
@@ -495,9 +492,9 @@ const ObjectGraphSidePanel: React.FC<Props> = ({
             type="button"
             onClick={onClose}
             className="p-1 text-gray-400 hover:text-gray-700 border-0 bg-transparent shrink-0"
-            aria-label={closeVariant === 'collapse' ? 'Collapse panel' : 'Close panel'}
+            aria-label="Close panel"
           >
-            {closeVariant === 'collapse' ? <ChevronLeft size={18} /> : <X size={18} />}
+            <X size={18} />
           </button>
         </div>
 
