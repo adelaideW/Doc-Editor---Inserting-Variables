@@ -46,7 +46,7 @@ import InsertLinkModal from './insertVariable/InsertLinkModal';
 import ImportModal from './insertVariable/ImportModal';
 import { applyImportToEditor, augmentItemForInsert } from './insertVariable/importContent';
 import { syncCanvasPageHeight } from './insertVariable/canvasLayout';
-import { clearEditorContents, isFullEditorSelection } from './insertVariable/editorSelectionUtils';
+import { clearEditorContents, computeCaretAnchorRect, isFullEditorSelection } from './insertVariable/editorSelectionUtils';
 import LuminaAiPopover from './insertVariable/LuminaAiPopover';
 import { offerLetterDemoHtml } from './insertVariable/offerLetterDemoHtml';
 import RecipientAssignPopover, {
@@ -297,59 +297,7 @@ const EditorCanvas: React.FC<Props> = ({
     [applyChipVisualState, closeRecipientPicker, notifyChange]
   );
 
-  const computeCaretAnchor = useCallback(() => {
-    const sel = window.getSelection();
-    const ed = editorRef.current;
-    if (!sel?.rangeCount || !ed) return { top: 0, left: 8 };
-
-    const live = sel.getRangeAt(0).cloneRange();
-    live.collapse(true);
-
-    const rects = live.getClientRects();
-    let rect: DOMRect =
-      rects.length > 0 ? (rects[rects.length - 1] as DOMRect) : (live.getBoundingClientRect() as DOMRect);
-
-    const sc = live.startContainer;
-    if (
-      rect.height === 0 &&
-      rect.width === 0 &&
-      sc.nodeType === Node.TEXT_NODE &&
-      (sc as Text).data.length > 0
-    ) {
-      const t = sc as Text;
-      const pos = Math.max(0, Math.min(live.startOffset, t.data.length - 1));
-      const probe = live.cloneRange();
-      probe.setStart(t, pos);
-      probe.setEnd(t, pos + 1);
-      const pr = probe.getBoundingClientRect();
-      if (pr.height || pr.width) {
-        rect = pr;
-      }
-    }
-
-    const LINE_ESTIMATE = 22;
-    const CARET_GAP = 12;
-    const DROPDOWN_MAX_W = 620;
-    let topPx: number;
-    let leftPx: number;
-
-    if (rect.height > 48 || rect.width > Math.min(ed.offsetWidth || 640, window.innerWidth) * 0.85) {
-      topPx = rect.top + LINE_ESTIMATE + CARET_GAP;
-      leftPx = rect.left + 2;
-    } else if (rect.height || rect.width) {
-      topPx = rect.bottom + CARET_GAP;
-      leftPx = rect.left;
-    } else {
-      const er = ed.getBoundingClientRect();
-      topPx = er.top + LINE_ESTIMATE + CARET_GAP;
-      leftPx = Math.max(er.left + 8, 8);
-    }
-
-    const pad = 8;
-    leftPx = Math.max(pad, Math.min(leftPx, window.innerWidth - DROPDOWN_MAX_W - pad));
-
-    return { top: topPx, left: leftPx };
-  }, []);
+  const computeCaretAnchor = useCallback(() => computeCaretAnchorRect(editorRef.current), []);
 
   const updateDropdownPosition = useCallback(() => {
     const anchor = computeCaretAnchor();
